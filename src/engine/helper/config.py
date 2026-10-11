@@ -178,6 +178,9 @@ TICK_SECONDS = 1.0          # How often the session ticks, pricing open episodes
 STATUS_SECONDS = 60         # How often a status line is logged.
 SUMMARY_SECONDS = 600       # How often each component logs its summary.
 SETTLE_CHECK_SECONDS = 30   # Between passes over the open trades whose game has started.
+FUTURES_SETTLE_CHECK_SECONDS = 3600     # Between checks of each open trade with no game behind it, before its payout time, spread
+                                        # over the passes, see money/settle.py. The venues settle many futures months early: on
+                                        # 2026-10-11, 26 live trades waiting on a payout time in 2027 had both legs settled already.
 
 
 def override(assignments):

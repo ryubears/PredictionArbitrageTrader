@@ -149,6 +149,27 @@ def test_a_game_and_a_race_start_when_their_event_does_and_a_future_has_no_start
     assert found["nhl-hart-2027-06-09-w"].close_time == "2027-06-09T23:59:00+00:00"   # The award, not the market's two weeks after.
 
 
+def test_results_give_what_a_long_contract_paid_one_event_at_a_time(monkeypatch):
+    def market(slug, status, long_price):
+        return {"slug": slug, "status": status, "endDate": "2026-10-09T14:25:43Z",
+                "marketSides": [{"long": True, "price": long_price}, {"long": False, "price": f"{1 - float(long_price):g}"}]}
+    events = {"aqc-mlb-2026-10-09-nlcsq": [market("nlcsq-sd", "MARKET_STATUS_RESOLVED", "0"), market("nlcsq-lad", "MARKET_STATUS_RESOLVED", "1"),
+                                           market("nlcsq-mil", "MARKET_STATUS_OPEN", "0.55")],
+              "cs2-aime-bg-2026-10-08": [market("aec-cs2-aime-bg-2026-10-08", "MARKET_STATUS_RESOLVED", "0.41")]}   # Paid the last fair price.
+    calls = []
+
+    def fake_get_json(url, params=None, retries=3):
+        calls.append(("get", params["slug"]))
+        return {"events": [{"slug": params["slug"], "markets": events[params["slug"]]}]}
+    monkeypatch.setattr(polymarket_us, "get_json", fake_get_json)
+    monkeypatch.setattr(polymarket_us.time, "sleep", lambda s: calls.append(("sleep", s)))
+    out = polymarket_us.results(["cs2-aime-bg-2026-10-08", "aqc-mlb-2026-10-09-nlcsq", "cs2-aime-bg-2026-10-08"])
+    at = "2026-10-09T14:25:43+00:00"
+    assert out == {"nlcsq-sd": (0.0, at), "nlcsq-lad": (1.0, at), "aec-cs2-aime-bg-2026-10-08": (0.41, at)}     # The open market is left out.
+    # Each event once, with a pause between them, so a pass never bursts against the limit the live orders share.
+    assert calls == [("get", "aqc-mlb-2026-10-09-nlcsq"), ("sleep", polymarket_us.RESULTS_SLEEP), ("get", "cs2-aime-bg-2026-10-08")]
+
+
 def test_balance_is_the_buying_power_of_the_dollar_balance(monkeypatch):
     calls = fake_api(monkeypatch, {("GET", "/account/balances"): {"balances": [{"currentBalance": 1500.0, "buyingPower": 1234.5, "currency": "USD"}]}})
     assert polymarket_us.balance() == 1234.5

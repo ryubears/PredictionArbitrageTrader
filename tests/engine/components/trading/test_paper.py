@@ -196,7 +196,7 @@ def test_a_settled_trade_is_not_flattened_any_more(tmp_path, quick):
     run(ex, kalshi_vanishes_and_polymarket_loses_its_bids)
     assert list(ex.exposed) == [stored(conn)[0]["id"]]                  # 50 yes held, with nothing to flatten against.
     s = settle.Settler(conn, cash, lambda m: None, executor=ex)
-    s.results = {"polymarket_us": lambda events: {"pm": ("yes", "2026-09-22T17:40:00+00:00")}}
+    s.results = {"polymarket_us": lambda events: {"pm": (1.0, "2026-09-22T17:40:00+00:00")}}
     # Polymarket US has bids again, which could sell the rest back.
     latest[("polymarket_us", "pm")] = Book("polymarket_us", "pm", "2026-09-22T17:45:30+00:00", [[0.44, 100]], [[0.45, 100]])
 
