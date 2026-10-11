@@ -7,7 +7,7 @@ import dataclasses
 import random
 import types
 import pytest
-from common.timeutil import at_seconds, epoch
+from common.timeutil import at_seconds, epoch, shift
 from common.venues import VENUES
 from db import database
 from db.models import Book, Leg
@@ -167,7 +167,7 @@ def test_exposure_is_flattened_on_a_later_tick_once_a_book_allows_it(tmp_path, q
         latest[("polymarket_us", "pm")] = Book("polymarket_us", "pm", NOW, [[0.43, 40]], [[0.45, 100]])     # 40 bid, 20 for us.
         ex.tick("2026-09-20T17:31:00+00:00")
         await asyncio.gather(*ex.tasks)
-        ex.tick("2026-09-22T21:30:00+00:00")                    # Past the payout, the rest is left to settle.
+        ex.tick(shift(PAYS_AT, hours=config.FLATTEN_PAST_PAYOUT_HOURS))     # A day past the payout, the rest is left to settle.
         await asyncio.gather(*ex.tasks)
     asyncio.run(later())
     t = stored(conn)[0]

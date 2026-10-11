@@ -41,16 +41,21 @@ A sale goes no lower than config.MIN_SALE_SHARE of what the contracts
 cost: below that it would give away most of what was paid, and the
 contracts are kept, as a bet that may still pay out.
 What it cannot sell stays on a list and is tried again on every tick,
-against the books as they are then, until it is flat, the bet pays out,
-or the settler says its contracts have resolved. A sale that filled
-nothing is not tried again for config.SALE_RETRY_SECONDS, since a book
-can show a bid an order never reaches. A sale its venue turned away for
-lack of cash waits until the cash there has grown, since a sale can need
-cash: each venue keeps one position per market, so selling the No one
-trade holds where others hold more Yes is buying Yes. The list is read back
-from the trades table when the process starts, so a restart does not
-leave a trade exposed. The settler leaves alone a trade while an order to
-flatten it is in flight.
+against the books as they are then, until it is flat or the settler says
+its contracts have resolved, however long the game outlasts the payout
+time we expected: a market that has stopped trading sells nothing, see
+flatten(). Until 2026-10-10 a trade was given up at that time: live trade
+4135, a Dota 2 map, sold back 25 of the 50 contracts it held on one leg,
+and the other 25 were never offered again while its market went on
+trading. Only one config.FLATTEN_PAST_PAYOUT_HOURS past it is let go. A
+sale that filled nothing is not tried again for config.SALE_RETRY_SECONDS,
+since a book can show a bid an order never reaches. A sale its venue
+turned away for lack of cash waits until the cash there has grown, since a
+sale can need cash: each venue keeps one position per market, so selling
+the No one trade holds where others hold more Yes is buying Yes. The list
+is read back from the trades table when the process starts, so a restart
+does not leave a trade exposed. The settler leaves alone a trade while an
+order to flatten it is in flight.
 
 Live trades a season's future, or a game before it starts, while the bet
 pays out config.MIN_PAYOUT_HOURS or more away and the edge returns
@@ -91,7 +96,7 @@ import math
 from dataclasses import dataclass
 from api.orders import exact, size as order_size
 from common.log import on_failure
-from common.timeutil import epoch, hours_between, now_iso
+from common.timeutil import epoch, hours_between, now_iso, shift
 from common.venues import is_maintenance
 from db import database
 from db.models import Ledger, Leg, Trade
@@ -104,6 +109,14 @@ def shard(leg):
     The exchange shard a leg's market trades on, whose cash is its own, as the catalog gave it, or None for a venue without shards.
     """
     return (leg.fee_info or {}).get("exchange_index")
+
+
+def flattened_until(trade):
+    """
+    When an exposed trade that has not settled stops being flattened, config.FLATTEN_PAST_PAYOUT_HOURS past its payout
+    time. That time is an estimate, which a game can outlast while its market trades.
+    """
+    return shift(trade.pays_at, hours=config.FLATTEN_PAST_PAYOUT_HOURS)
 
 
 def order_cost(leg, quantity):
@@ -391,11 +404,13 @@ class Executor:
     def reload_exposed(self):
         """
         Take back this mode's trades left holding more on one side than the
-        other when the process last stopped, so they are flattened again. A
-        trade past its payout time is left to settle as it stands, and one
-        with an order of unknown outcome is left to a human.
+        other when the process last stopped, so they are flattened again, as
+        retry() would have gone on doing: any not settled, though its payout
+        time has passed, unless it is past flattened_until(). One with an
+        order of unknown outcome is left to a human.
         """
-        for trade, *fee_infos in database.load_exposed_trades(self.conn, self.mode, self.clock()):
+        given_up = shift(self.clock(), hours=-config.FLATTEN_PAST_PAYOUT_HOURS)     # A payout time this or earlier is past flattened_until().
+        for trade, *fee_infos in database.load_exposed_trades(self.conn, self.mode, given_up):
             self.exposed[trade.id] = (trade, [dataclasses.replace(leg, fee_info=fee_info) for leg, fee_info in zip(trade.legs(), fee_infos)])
         if self.exposed:
             self.log(f"{self.mode} trades left exposed before this start, flattening again: {', '.join(map(str, self.exposed))}")
@@ -403,17 +418,20 @@ class Executor:
     async def retry(self, now):
         """
         Try once more to flatten every exposed trade against the current books.
-        A trade past its payout time is left to settle as it stands, one
-        whose last sale filled nothing waits config.SALE_RETRY_SECONDS, and
-        one whose last sale its venue turned away for lack of cash waits until
-        the cash there has grown, rather than sending the same order every tick.
+        A trade is tried until it is flat or settles, see settled(), past its
+        payout time too, which is only an estimate: a market that has stopped
+        trading sells nothing, see flatten(). One past flattened_until() is
+        left to settle as it stands. One whose last sale filled nothing waits
+        config.SALE_RETRY_SECONDS, and one whose last sale its venue turned
+        away for lack of cash waits until the cash there has grown, rather
+        than sending the same order every tick.
         Returns whether anything was sold, which is all that changes a result.
         """
         sold = False
         for trade_id, (trade, legs) in list(self.exposed.items()):
             if trade_id not in self.exposed:
                 continue        # Settled while an earlier trade was being flattened.
-            if now >= trade.pays_at:
+            if now >= flattened_until(trade):
                 self.forget(trade_id)
                 continue
             if trade_id in self.set_aside:

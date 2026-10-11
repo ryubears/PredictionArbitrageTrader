@@ -228,11 +228,14 @@ The status line counts the markets not trading, by venue and why.
    other venue might cost less, but would tie the money up until the bet
    pays, where a sale frees it at once.
 4. **Keep trying** (`retry`, every tick). Whatever stays exposed is tried
-   again against newer books until it is flat, its payout time passes, or
-   it settles, except that a sale that filled nothing waits a minute
+   again against newer books until it is flat or it settles, however long
+   the game outlasts its payout time, which is only an estimate: a market
+   that has stopped trading sells nothing. Only a trade a day past its
+   payout time (`FLATTEN_PAST_PAYOUT_HOURS`) is let go, for contracts that
+   never resolve. A sale that filled nothing waits a minute
    (`SALE_RETRY_SECONDS`), and one the venue turned away for lack of cash
    waits until the cash there has grown. A restart reads exposed trades
-   back from the database (`reload_exposed`).
+   back from the database by the same rule (`reload_exposed`).
 5. **Settle** (`Settler` in `money/settle.py`). From kickoff, every 30
    seconds, the settler asks the venues how the held contracts resolved,
    and a future, which has no kickoff, once an hour before its payout
@@ -562,7 +565,8 @@ run trades every sport given to `--sport`, comma separated as in
 `--sport nfl,ncaaf,mlb,nhl,nba`, or every one with `--sport all`, since the
 money is one pool and a second process would spend the same dollars. How
 long a game is expected to last is set for every sport in `GAME_HOURS`,
-measured for the first five and an allowance for the rest. The pieces it
+measured for the first five and an allowance for the rest, which for
+Dota 2 has been short, see **trading/** below. The pieces it
 wires together are in
 `engine/components/`, in three folders by what they do: `market/` follows
 the venues, `trading/` makes the trades, and `money/` keeps the cash. What
@@ -716,14 +720,24 @@ purchase would hold it until the bet pays. A sale goes no lower than half
 of what the contracts cost (`MIN_SALE_SHARE`): below that it would give
 away most of what was paid, so the contracts are kept, a bet that may
 still pay out, until a bid worth taking comes. Whatever stays exposed is
-tried again on every tick until it is flat, the bet pays out, or the
-settler settles it. A sale that filled nothing is tried again only a
-minute later (`SALE_RETRY_SECONDS`), since a book can show a bid an
-order never reaches. A sale its venue turned away for lack of cash is
+tried again on every tick until it is flat or the settler settles it, past
+the payout time we expected too: a game can outlast it with its market
+trading, and a market that has stopped trading sells nothing. Until
+2026-10-10 a trade was given up at its payout time. Live trade 4135, a
+Dota 2 map signalled 56 minutes past its own, sold back 25 of the 50
+contracts Polymarket US filled over Kalshi's none, and the other 25,
+14.43$, were never offered again, though the pair traded again 29 seconds
+later and twice more by 20:45 UTC. From 2026-10-05, 6 of 19 Dota 2 trades
+in play, 1 of 8 LoL and 2 of 154 tennis were signalled past their own
+payout time. A trade is now let go only a day past it
+(`FLATTEN_PAST_PAYOUT_HOURS`), for contracts that never resolve. A sale
+that filled nothing is tried again only a minute later
+(`SALE_RETRY_SECONDS`), since a book can show a bid an order never
+reaches. A sale its venue turned away for lack of cash is
 tried again only once the cash there has grown, by a payout, a deposit, or
 another sale, rather than sent again every second. A restart takes back
-from the trades table whatever is still exposed, so a crash or a deploy
-does not leave it unhedged. A live sale is
+from the trades table whatever is still exposed, by the same rule, so a
+crash or a deploy does not leave it unhedged. A live sale is
 limited to the deepest price the books said it would reach, so a book that
 moved leaves the rest for the next tick rather than filling far from its
 price. Once a game has started, orders and flattening only use a book that
