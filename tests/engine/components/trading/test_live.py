@@ -3,10 +3,11 @@ Tests for the live executor, with the venues' answers to its orders scripted by 
 """
 
 import asyncio
+import dataclasses
 import threading
 import pytest
 from api import orders
-from common.timeutil import epoch
+from common.timeutil import epoch, shift
 from db import database
 from db.models import Book, Order
 from engine.components.money.live import LiveBalances
@@ -14,7 +15,7 @@ from engine.components.money.paper import PaperBalances
 from engine.components.trading.live import LiveExecutor
 from engine.components.trading.paper import PaperExecutor
 from engine.helper import config
-from trade_setup import FEES, NO, NO_K_FEES, NO_PM_FEES, NOW, PAIR, YES, stored
+from trade_setup import FEES, NO, NO_K_FEES, NO_PM_FEES, NOW, PAIR, PAYS_AT, YES, stored
 from trade_setup import books as shared_books
 
 
@@ -304,6 +305,65 @@ def test_a_restart_takes_back_what_was_left_exposed_and_flattens_it_again(tmp_pa
     assert list(again.exposed) == [1] and "live trades left exposed before this start, flattening again: 1" in logs
     assert again.halted and again.brakes.stopped is None                # Still halted on results, so still flattening.
     asyncio.run(again.retry(NOW))
+    assert venues.orders == [("polymarket_us", "sell", "yes", 10, 0.44)]
+    assert again.exposed == {} and stored(conn, "trades")[0]["yes_held"] == 0
+
+
+LATE = "2026-09-22T21:30:00+00:00"                                       # 45 minutes past PAYS_AT, the game still under way.
+
+
+def changed(latest, now):
+    """
+    Each book in latest as just changed at now, so a game under way trades on it.
+    """
+    latest.update({key: dataclasses.replace(book, ts=now) for key, book in latest.items()})
+
+
+def test_a_trade_still_exposed_past_its_payout_time_is_flattened_again(tmp_path):
+    venues = Venues(polymarket_us=[fills(), fills(0), fills(0), fills()], kalshi=[fills(4)])
+    latest = books()
+    conn, cash, ex = executor(tmp_path, venues, latest)
+    trade(ex)                                                           # The 6 yes over found no taker, though the book showed one.
+    assert list(ex.exposed) == [1]
+    # The payout time is kickoff plus the game and the venues settling, an estimate. On 2026-10-09 live trade 4135, a Dota 2
+    # map, was let go at its own with 25 contracts on one leg, while its market went on trading.
+    changed(latest, LATE)
+    at(ex, LATE)
+    asyncio.run(ex.retry(LATE))
+    assert len(venues.orders) == 4 and venues.orders[-1] == ("polymarket_us", "sell", "yes", 6, 0.44)
+    assert list(ex.exposed) == [1]                                      # Sold nothing again, so tried a minute on.
+    later = "2026-09-22T21:31:00+00:00"                                 # A minute on.
+    changed(latest, later)
+    at(ex, later)
+    asyncio.run(ex.retry(later))
+    assert len(venues.orders) == 5 and ex.exposed == {} and stored(conn, "trades")[0]["yes_held"] == 4
+    assert stored(conn, "trades")[0]["hedge"].endswith("then sold back 6 of 6 on polymarket_us at 21:31:00")
+
+
+def test_a_trade_that_never_settles_is_let_go_a_day_past_its_payout_time(tmp_path):
+    venues = Venues(polymarket_us=[fills(), fills(0)], kalshi=[fills(4)])
+    latest = books()
+    conn, cash, ex = executor(tmp_path, venues, latest)
+    trade(ex)
+    given_up = shift(PAYS_AT, hours=config.FLATTEN_PAST_PAYOUT_HOURS)
+    changed(latest, given_up)
+    at(ex, given_up)
+    asyncio.run(ex.retry(given_up))
+    assert len(venues.orders) == 3 and ex.exposed == {}                 # Left to settle as it stands.
+    assert executor(tmp_path, Venues(), latest, now=given_up)[2].exposed == {}      # And not taken back by a restart.
+
+
+def test_a_restart_past_the_payout_time_takes_back_what_is_still_exposed(tmp_path):
+    latest = books()
+    venues = Venues(polymarket_us=[fills(), fills(0)], kalshi=[bids_gone(latest)])
+    conn, cash, ex = executor(tmp_path, venues, latest)
+    trade(ex)                                                           # Kalshi filled nothing, and the sale back found nothing.
+    changed(latest, LATE)
+    logs = []
+    venues = Venues(polymarket_us=[fills()])
+    conn, cash, again = executor(tmp_path, venues, latest, logs=logs, now=LATE)    # A deploy, with the game running late.
+    assert list(again.exposed) == [1] and "live trades left exposed before this start, flattening again: 1" in logs
+    asyncio.run(again.retry(LATE))
     assert venues.orders == [("polymarket_us", "sell", "yes", 10, 0.44)]
     assert again.exposed == {} and stored(conn, "trades")[0]["yes_held"] == 0
 
