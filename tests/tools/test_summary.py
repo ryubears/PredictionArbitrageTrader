@@ -337,3 +337,82 @@ def test_opportunities_on_a_database_from_before_step_14_are_shown_without_its_p
         conn.execute("ALTER TABLE opportunities DROP COLUMN pm_changed")    # As before step 14.
     out = report(tmp_path, monkeypatch, capsys, fill, markets=summary.MARKET_CHOICES["futures"])
     assert "), last 12 hours\n  1 episodes could have taken 94$ in one order each and locked in 6.00$\n" in out
+
+
+def held_trade(conn, mode="live", pair_id=1, signal=BEFORE, held=(5, 5), cost=(2.5, 2.25), profit=0.0, hedge=0.0, status="filled",
+               yes=("kalshi", "k", "yes"), no=("polymarket_us", "p", "yes"), pays_at="2026-12-20T00:00:00+00:00"):
+    """
+    Add a trade of the mode on the pair, opened at signal, holding held on its yes and no legs at cost, each leg on
+    (venue, contract, polarity), and return it. By default Kalshi's k holds the bet's yes and Polymarket US's p its no.
+    """
+    t = Trade(mode=mode, pair_id=pair_id, trade="t", signal_ts=signal, edge=0.06, quantity=max(held),
+              yes_venue=yes[0], yes_contract=yes[1], yes_polarity=yes[2], yes_limit=0.5,
+              no_venue=no[0], no_contract=no[1], no_polarity=no[2], no_limit=0.45, pays_at=pays_at,
+              yes_filled=held[0], no_filled=held[1], yes_held=held[0], no_held=held[1], matched=min(held),
+              yes_cost=cost[0], no_cost=cost[1], profit=profit, hedge_pnl=hedge, status=status)
+    database.insert_trade(conn, t)
+    return t
+
+
+def test_netting_pairs_a_contracts_yes_with_its_no_on_the_same_venue():
+    assert summary.netted([
+        ("kalshi", "k", "yes", "yes", 20), ("polymarket_us", "p", "yes", "no", 20),         # k's yes and p's no.
+        ("polymarket_us", "p", "yes", "yes", 3), ("kalshi", "k", "yes", "no", 2.5),         # p's yes and k's no, a later trade.
+        # Through a contract paying on the bet's no: the bet's yes is q's no, and its no q's yes.
+        ("polymarket_us", "q", "no", "yes", 4), ("polymarket_us", "q", "no", "no", 1.01),
+        ("kalshi", "m", "yes", "yes", 7), ("polymarket_us", "m", "yes", "no", 7),           # One id on two venues, which never net.
+        ("kalshi", "n", "yes", "yes", 0.004), ("kalshi", "n", "yes", "no", 9)]) == {        # Under the hundredth contracts trade in.
+        "kalshi": 2.5, "polymarket_us": 4.01}
+
+
+def test_live_open_capital_leaves_out_what_venue_netting_already_paid_back(tmp_path, monkeypatch, capsys):
+    def fill(conn, mode="live"):
+        open_trades(conn, mode)     # 20 of k's yes on Kalshi and 20 of p's no on Polymarket US, for 18.85$.
+        # A later trade the other way round: 3 of p's yes on Polymarket US and 2 of k's no on Kalshi.
+        held_trade(conn, mode, held=(3, 2), cost=(1.35, 1.0), profit=0.10,
+                   yes=("polymarket_us", "p", "yes"), no=("kalshi", "k", "yes"))
+    out = report(tmp_path, monkeypatch, capsys, fill)
+    lines = out.split("\nlive futures open trades: ")[1].splitlines()
+    # The venues paid back 3 pairs on Polymarket US and 2 on Kalshi, a dollar each, out of the 21.20$ the trades cost.
+    assert lines[4] == "  capital 21.20$, 5.00$ of it already paid back by netting, so 16.20$ still held on kalshi 8.50$, polymarket_us 7.70$"
+    # 1.23$ on the 16.20$ still held is 7.6%, and the rate a year is on it too: 456.55$ a year on it is 2,818%.
+    assert lines[5] == "  expected to return 1.23$ in profit, 7.6% on capital, 2,818.2% a year"
+    # Paper's books do not net, so its rates are on the whole 21.20$.
+    out = report(tmp_path / "b", monkeypatch, capsys, lambda conn: fill(conn, "paper"), modes=("paper",))
+    lines = out.split("\npaper futures open trades: ")[1].splitlines()
+    assert lines[4:6] == ["  capital 21.20$, held on kalshi 10.50$, polymarket_us 10.70$",
+                          "  expected to return 1.23$ in profit, 5.8% on capital, 2,153.5% a year"]
+
+
+def test_the_net_adds_what_exposed_contracts_made_or_lost_at_settlement_in_the_window(tmp_path, monkeypatch, capsys):
+    def fill(conn):
+        held_trade(conn, signal=INSIDE, profit=0.30, hedge=-0.05)      # Opened in the window and still open.
+        for held, cost, profit, status, payouts, at in (
+                ((10, 10), (4.5, 4.7), 0.80, "filled", (10.0, 0.0), INSIDE),     # Balanced, which realizes its 0.80$.
+                ((10, 6), (4.5, 2.82), 0.48, "partial", (10.0, 0.0), INSIDE),    # 4 more on the yes, which won: 4 x 0.55$.
+                ((10, 6), (4.5, 2.82), 0.48, "partial", (0.0, 6.0), INSIDE),     # The same, but the no won: 4 x -0.45$.
+                ((10, 6), (4.5, 2.82), 0.48, "partial", (10.0, 0.0), BEFORE),    # Settled before the window.
+                ((3, 0), (1.5, 0.0), 0.0, "failed", (0.0, None), INSIDE)):       # Only the yes, which lost, the no holding nothing.
+            t = held_trade(conn, held=held, cost=cost, profit=profit, status=status)
+            s = Settlement(t.id, at, mode="live")
+            s.record("yes", "no" if payouts[0] == 0 else "yes", payouts[0], at)
+            if payouts[1] is not None:
+                s.record("no", "no", payouts[1], at)
+            database.insert_settlement(conn, s)
+        # A game's, settled in the window: 1 more on the yes, which won, 1 x 0.55$.
+        t = held_trade(conn, pair_id=3, held=(2, 1), cost=(0.9, 0.5), profit=0.05, status="partial")
+        s = Settlement(t.id, INSIDE, mode="live")
+        s.record("yes", "yes", 2.0, INSIDE)
+        s.record("no", "yes", 0.0, INSIDE)
+        database.insert_settlement(conn, s)
+    out = report(tmp_path, monkeypatch, capsys, fill)
+    # 0.25$ locked in and hedged, and 2.20$ - 1.80$ - 1.50$ at settlement on the three exposed trades settled in the window.
+    assert ("\nlive futures trades: 6 in all, 1 in the last 12 hours\n"
+            "  net -0.85$: 0.25$ locked in and hedged on the trades opened, -1.10$ on the exposed contracts of 3 trades settled\n") in out
+    assert [r[-1] for r in table(out, "live futures by outcome, last 12 hours")] == ["0.25"]    # Its net is what was locked in and hedged.
+    # A market with none opened in the window still shows what settled in it.
+    assert ("\nlive in-play trades: 1 in all, 0 in the last 12 hours\n"
+            "  net 0.55$: 0.00$ locked in and hedged on the trades opened, 0.55$ on the exposed contracts of 1 trades settled\n") in out
+    # And one with neither shows no net.
+    out = report(tmp_path / "b", monkeypatch, capsys, lambda conn: None)
+    assert "\nlive futures trades: 0 in all, 0 in the last 12 hours\n\nlive futures open trades: none" in out and "  net " not in out
