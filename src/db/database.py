@@ -343,13 +343,13 @@ def load_open_trades(conn, mode):
           AND NOT EXISTS (SELECT 1 FROM settlements s WHERE s.trade_id = t.id) ORDER BY t.id""", (mode,))]
 
 
-def load_exposed_trades(conn, mode, now):
+def load_exposed_trades(conn, mode, paid_after):
     """
     Trades of one mode that are done, hold more on one side than the other,
-    have not settled, and pay out after now, with their pair's label, as
-    (Trade, yes fee_info, no fee_info) with the fee schedule of each leg's
-    contract. A trade with an order of unknown outcome is left out, since
-    what it holds is unknown.
+    have not settled, and pay out, by the time we expected, after
+    paid_after, with their pair's label, as (Trade, yes fee_info, no
+    fee_info) with the fee schedule of each leg's contract. A trade with an
+    order of unknown outcome is left out, since what it holds is unknown.
     """
     out = []
     for r in conn.execute("""
@@ -361,7 +361,7 @@ def load_exposed_trades(conn, mode, now):
         WHERE t.mode = ? AND t.status != 'sent' AND t.yes_held != t.no_held AND t.pays_at > ?
           AND NOT EXISTS (SELECT 1 FROM settlements s WHERE s.trade_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.trade_id = t.id AND o.status = 'error')
-        ORDER BY t.id""", (mode, now)):
+        ORDER BY t.id""", (mode, paid_after)):
         row = dict(r)
         yes_fee_info, no_fee_info = jsonutil.parse(row.pop("yes_fee_info"), {}), jsonutil.parse(row.pop("no_fee_info"), {})
         out.append((Trade(**row), yes_fee_info, no_fee_info))

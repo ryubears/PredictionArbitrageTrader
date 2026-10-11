@@ -37,6 +37,15 @@ MIN_SALE_SHARE = 0.5        # The least share of what contracts cost a sale to f
                             # may still pay out, rather than given away: a 4 cent contract is not sold at the 1 cent bid.
 SALE_RETRY_SECONDS = 60     # After a sale to flatten a trade fills nothing, how long until the trade is tried again. A book can
                             # show a bid an order never reaches, and on 2026-10-01 such a sale went to Kalshi every second.
+FLATTEN_PAST_PAYOUT_HOURS = 24  # How long past its payout time an exposed trade that has not settled is still flattened, see
+                            # Executor.retry(). The payout time is an estimate, kickoff plus GAME_HOURS plus SETTLE_HOURS, and
+                            # a game can outlast it with its market trading. To 2026-10-10 a trade was given up at it: live trade
+                            # 4135, a Dota 2 map signalled on 2026-10-09 at 20:26 UTC, 56 minutes past its own 19:30, sold back
+                            # 25 of the 50 Polymarket US filled over Kalshi's none, and the other 25, 14.43$, were never tried
+                            # again, though the pair traded again at 20:43 and 20:45. From 2026-10-05, 6 of 19 Dota 2 trades in
+                            # play, 1 of 8 LoL and 2 of 154 tennis were signalled past their own. A trade is now flattened until
+                            # it settles or its market stops trading, a game's books being dropped RECORD_HOURS after kickoff and
+                            # a future's at its close: this only lets go of one whose contracts never resolve.
 # A leg on a venue here trades only once its book is current: newer, by the venues' own clocks, than the other leg's last
 # change, or else that change is this many seconds old, time for any reaction to it on this venue to reach us. Polymarket US
 # books reached us 85 ms after the venue changed them at the median, 160 at the 90th percentile, so a price that moved on
@@ -140,7 +149,9 @@ GAME_HOURS = {              # How long a game is expected to last, kickoff to fi
     "tennis": 3.0, "ufc": 1.0, "darts": 1.5,     # UFC fight's walk out and five rounds with the card running late, and a
     "f1": 2.0, "nascar": 4.0,                   # race's. Politics has no game, but every sport
     "politics": 0.0,                            # needs a length. An esports match's best of three maps, with the breaks
-    **{title: 3.0 for title in sports.ESPORTS},  # between them and a start running late, also an allowance.
+    **{title: 3.0 for title in sports.ESPORTS},  # between them and a start running late, also an allowance. It was short
+                                                # for Dota 2: from 2026-10-05, 6 of its 19 live trades in play were
+                                                # signalled past their payout time, see FLATTEN_PAST_PAYOUT_HOURS.
 }
 SETTLE_HOURS = 0.5          # Final whistle to the venues settling. A game's money is back SETTLE_HOURS after it ends.
 RECORD_HOURS = 5            # Kickoff to when a game's contracts stop being recorded, whatever their close time says. The kickoff
