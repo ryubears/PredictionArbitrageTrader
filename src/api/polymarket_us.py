@@ -31,6 +31,9 @@ from db.models import Contract
 
 GATEWAY = "https://gateway.polymarket.us/v1"    # Public catalog of events and markets.
 RACE_DAYS = 2           # The longest a race's event runs, start to end, so that a longer one with a sports data id is a season's award.
+# Seconds between the calls of one results lookup, one an event, so a settlement pass never bursts: Cloudflare answered HTTP 429
+# at about 6 calls a second on 2026-10-11, and the live orders share that limit.
+RESULTS_SLEEP = 0.5
 API = "https://api.polymarket.us/v1"            # Signed requests for books and trading.
 API_PATH = "/v1"                                # API's path, which a signed request's signature covers.
 WS_URL = "wss://api.polymarket.us/v1/ws/markets"
@@ -166,16 +169,24 @@ def contracts(sport, tags):
 def results(event_slugs):
     """
     Settlement results for every market on the events, as {market slug:
-    (result, settled_at)} with result 'yes' when the long side paid out and
-    'no' when it did not. Markets not yet resolved are left out.
+    (paid, settled_at)} with paid what a contract of the long side, the
+    market's yes, paid, from 0 to 1: the long side's price once the market
+    has resolved, 1 when it won and 0 when it lost, and part of a dollar
+    when the rules pay one, as the last fair price of 0.41 for a drawn CS2
+    match on 2026-10-09, or a share of the dollar for a tie. Markets not yet
+    resolved are left out. Each event costs a call, with RESULTS_SLEEP
+    between them.
     """
     out = {}
-    for slug in set(event_slugs):
+    for i, slug in enumerate(sorted(set(event_slugs))):
+        if i:
+            time.sleep(RESULTS_SLEEP)
         for event in get_json(f"{GATEWAY}/events", {"slug": slug}).get("events", []):
             for m in event.get("markets", []):
                 long_side = next((s for s in m.get("marketSides", []) if s.get("long")), None)
-                if m.get("status") == "MARKET_STATUS_RESOLVED" and long_side and long_side.get("price") in ("0", "1"):
-                    out[m["slug"]] = ("yes" if long_side["price"] == "1" else "no", iso(m.get("endDate")))
+                paid = float_or_none(long_side.get("price")) if long_side else None
+                if m.get("status") == "MARKET_STATUS_RESOLVED" and paid is not None and 0 <= paid <= 1:
+                    out[m["slug"]] = (paid, iso(m.get("endDate")))
     return out
 
 
