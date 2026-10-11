@@ -216,11 +216,15 @@ def test_every_model_writes_only_columns_its_table_has():
         assert set(columns) - set(database.columns(model)) <= {"id"}, table      # Nothing in the table the model forgets.
 
 
-def trade(mode, pair_id=1, **fields):
+def trade(mode, pair_id=1, yes=("polymarket_us", "pm", "yes"), no=("kalshi", "k", "yes"), **fields):
+    """
+    A trade of the mode on the pair, each leg on (venue, contract, polarity), by default Polymarket US's pm holding the bet's
+    yes and Kalshi's k its no.
+    """
     from db.models import Trade
     return Trade(mode=mode, pair_id=pair_id, trade="t", signal_ts="2026-09-27T17:30:00+00:00", edge=0.08, quantity=5,
-                 yes_venue="polymarket_us", yes_contract="pm", yes_polarity="yes", yes_limit=0.45,
-                 no_venue="kalshi", no_contract="k", no_polarity="yes", no_limit=0.47, pays_at="2026-09-27T20:45:00+00:00", **fields)
+                 yes_venue=yes[0], yes_contract=yes[1], yes_polarity=yes[2], yes_limit=0.45,
+                 no_venue=no[0], no_contract=no[1], no_polarity=no[2], no_limit=0.47, pays_at="2026-09-27T20:45:00+00:00", **fields)
 
 
 def test_paper_and_live_trades_and_settlements_are_kept_apart(tmp_path):
@@ -240,6 +244,37 @@ def test_paper_and_live_trades_and_settlements_are_kept_apart(tmp_path):
     assert database.load_open_trades(conn, "live") == [] and database.load_held(conn, "live") == {}
     assert [t.id for t in database.load_open_trades(conn, "paper")] == [paper.id]             # Settling the live trade leaves paper alone.
     assert [s.trade_id for s in database.load_settlements(conn, "live")] == [live.id] and database.load_settlements(conn, "paper") == []
+
+
+def test_netting_pairs_a_contracts_yes_with_its_no_on_the_same_venue():
+    assert database.netted([
+        ("kalshi", "k", 20), ("polymarket_us", "p", -20),          # k's yes and p's no.
+        ("polymarket_us", "p", 3), ("kalshi", "k", -2.5),          # p's yes and k's no, a later trade.
+        ("kalshi", "m", 7), ("polymarket_us", "m", -7),            # One id on two venues, which never net.
+        ("kalshi", "n", 0.004), ("kalshi", "n", -9)]) == {         # Under the hundredth contracts trade in.
+        "kalshi": 2.5, "polymarket_us": 3}
+    assert database.netted([]) == {}
+
+
+def test_the_pairs_netting_paid_back_are_those_the_unsettled_trades_of_one_mode_hold(tmp_path):
+    from db.models import Settlement
+    conn = database.connect(tmp_path / "t.sqlite")
+    filled = dict(status="filled", yes_cost=2.25, no_cost=2.35)
+    first = trade("live", yes_held=5, no_held=5, **filled)              # 5 of pm's yes on Polymarket US and 5 of k's no on Kalshi.
+    database.insert_trade(conn, first)
+    assert database.load_netted(conn, "live") == {}
+    later = trade("live", yes=("kalshi", "k", "yes"), no=("polymarket_us", "pm", "yes"), yes_held=3, no_held=3, **filled)
+    database.insert_trade(conn, later)                                  # The other way round: 3 of k's yes and 3 of pm's no.
+    # The bet's yes through pm, which pays on the bet's no, is 2 of pm's no. Its no leg, through k2, nets with nothing.
+    database.insert_trade(conn, trade("live", yes=("polymarket_us", "pm", "no"), no=("kalshi", "k2", "yes"),
+                                      yes_held=2, no_held=2, **filled))
+    database.insert_trade(conn, trade("paper", yes=("kalshi", "k", "yes"), no=("polymarket_us", "pm", "yes"), yes_held=5, no_held=5,
+                                      **filled))                        # As the later one, but paper.
+    assert database.load_netted(conn, "live") == {"kalshi": 3, "polymarket_us": 5}
+    assert database.load_netted(conn, "paper") == {}                    # Only paper's own trades, which hold no pair.
+    assert database.load_held(conn, "live") == pytest.approx({"polymarket_us": 6.85, "kalshi": 6.95})     # Still at cost.
+    database.insert_settlement(conn, Settlement(later.id, "2026-09-27T20:30:00+00:00", mode="live"))
+    assert database.load_netted(conn, "live") == {"polymarket_us": 2}  # The settled trade's pairs are gone with it.
 
 
 def test_a_read_only_connection_reads_what_the_live_process_writes_and_writes_nothing(tmp_path):

@@ -23,14 +23,15 @@ def setup(tmp_path, cash_each=50.0):
     return conn, brakes.Brakes(conn, cash, lambda m: None, clock=lambda: NOW)
 
 
-def live_trade(conn, yes_held, no_held, orders, settled=None, yes_cost=0.0, no_cost=0.0):
+def live_trade(conn, yes_held, no_held, orders, settled=None, yes_cost=0.0, no_cost=0.0, yes=("polymarket_us", "pm"), no=("kalshi", "k")):
     """
     Store a done live trade holding yes_held and no_held, with its orders as [(action, dollars, answered at, status)],
-    and a settlement as (settled at, payouts) when given.
+    and a settlement as (settled at, payouts) when given. Its legs are on (venue, contract), each paying on the bet's
+    yes, by default Polymarket US's pm holding the bet's yes and Kalshi's k its no.
     """
     t = Trade(mode="live", pair_id=1, trade="t", signal_ts="2026-09-27T17:30:00+00:00", edge=0.08, quantity=10,
-              yes_venue="polymarket_us", yes_contract="pm", yes_polarity="yes", yes_limit=0.45,
-              no_venue="kalshi", no_contract="k", no_polarity="yes", no_limit=0.47, pays_at="2026-09-27T21:00:00+00:00",
+              yes_venue=yes[0], yes_contract=yes[1], yes_polarity="yes", yes_limit=0.45,
+              no_venue=no[0], no_contract=no[1], no_polarity="yes", no_limit=0.47, pays_at="2026-09-27T21:00:00+00:00",
               yes_held=yes_held, no_held=no_held, yes_cost=yes_cost, no_cost=no_cost, status="filled")
     database.insert_trade(conn, t)
     for action, dollars, at, status in orders:
@@ -107,3 +108,30 @@ def test_the_live_money_is_the_cash_and_what_open_trades_hold_at_cost(tmp_path):
     conn, b = setup(tmp_path)                                           # 100 dollars of cash.
     live_trade(conn, 10, 0, [("buy", 4.5, "2026-09-27T19:00:00+00:00", "filled")], yes_cost=4.5)
     assert b.capital() == pytest.approx(104.5)
+
+
+def netted_trades(conn):
+    """
+    Store two open live trades the venues have netted: 30 of pm's yes on Polymarket US and 30 of k's no on Kalshi, for
+    27.60$, then the other way round, 30 of k's yes and 30 of pm's no, for 27.60$ too. Each venue paid back 30 pairs.
+    """
+    live_trade(conn, 30, 30, [], yes_cost=13.5, no_cost=14.1)
+    live_trade(conn, 30, 30, [], yes_cost=13.5, no_cost=14.1, yes=("kalshi", "k"), no=("polymarket_us", "pm"))
+
+
+def test_the_live_money_leaves_out_the_pairs_the_venues_already_paid_back_by_netting(tmp_path):
+    conn, b = setup(tmp_path)                                           # 100 dollars of cash, the 60 paid back by netting in it.
+    netted_trades(conn)
+    # 100 in cash, the 55.20$ the trades cost, less the 60 pairs: just what it would be had the venues not netted,
+    # 60 less in cash and the 55.20$ at cost.
+    assert b.capital() == pytest.approx(95.2)
+
+
+def test_a_loss_is_measured_against_the_live_money_without_the_pairs_netting_paid_back(tmp_path):
+    conn, b = setup(tmp_path)
+    netted_trades(conn)                                                 # 95.20$ of live money.
+    at = "2026-09-27T19:00:00+00:00"
+    live_trade(conn, 0, 0, [("buy", 30.0, at, "filled"), ("sell", 15.0, at, "filled")])
+    b.check_results()
+    # 15 lost of the 110.20$ there was. Counting the pairs twice, it was 15 of 170.20$, 9%, and live trading went on.
+    assert b.halted == "the live trades decided in the last 6 hours lost 15.00$, 14% of the live money, over the 10% limit"

@@ -49,7 +49,18 @@ orders table. A trade with an order of unknown outcome is left out, since
 its records may be wrong.
 
 The live money a loss is measured against is the cash on both venues
-plus what open live trades hold, at what it cost.
+plus what open live trades hold, at what it cost, less a dollar for each
+pair the venues have already paid back. Both venues net a contract's yes
+and no into one position and pay a dollar a pair at once, so when a
+later trade holds the other outcome of a contract an earlier open one
+holds, on the same venue, the smaller of the two is back in cash though
+both trades still count what it cost until they settle, see
+database.netted(). A dollar a pair, not what the pairs cost, keeps the
+live money what it would be had the venues not netted, so what a trade
+locked in counts in its result alone. Until 2026-10-12 those pairs were
+counted twice, in the cash and at cost: on 2026-10-11 about 473$ of the
+3,601.57$ open live trades held, which made the halt on losses looser
+than meant.
 """
 
 from common.paths import DATA_DIR
@@ -129,9 +140,13 @@ class Brakes:
 
     def capital(self):
         """
-        The live money in all: the cash on both venues, what is held back for orders in flight included, and what open live trades hold, at cost.
+        The live money in all: the cash on both venues, what is held back for orders in flight included, and what open live
+        trades hold, at cost, less a dollar for each pair the venues have already paid back by netting, which the cash
+        holds already, see database.netted().
         """
-        return self.cash.total() + sum(database.load_held(self.conn, self.cash.mode).values())
+        held = sum(database.load_held(self.conn, self.cash.mode).values())
+        paid = sum(database.load_netted(self.conn, self.cash.mode).values())
+        return self.cash.total() + held - paid
 
     # RESULTS
 
