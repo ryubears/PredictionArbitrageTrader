@@ -234,10 +234,12 @@ The status line counts the markets not trading, by venue and why.
    waits until the cash there has grown. A restart reads exposed trades
    back from the database (`reload_exposed`).
 5. **Settle** (`Settler` in `money/settle.py`). From kickoff, every 30
-   seconds, the settler asks the venues how the held contracts resolved.
-   It pays each winning leg a dollar a contract into the desk's money,
-   stores the `Settlement`, and tells the executor to stop flattening that
-   trade.
+   seconds, the settler asks the venues how the held contracts resolved,
+   and a future, which has no kickoff, once an hour before its payout
+   time, since the venues settle many futures early. It pays each leg what
+   its contracts paid into the desk's money, a dollar a contract on the
+   winning side as a rule, stores the `Settlement`, and tells the executor
+   to stop flattening that trade.
 
 ### What happens when
 
@@ -252,7 +254,9 @@ The status line counts the markets not trading, by venue and why.
 - every hour the attestation watch reads when the Kalshi key's location
   attestation lapses;
 - each desk reads the live balances every 15 seconds, retries exposed
-  trades, and starts a settlement pass every 30 seconds, and the live desk
+  trades, and starts a settlement pass every 30 seconds, which also asks
+  about each open future once an hour (`FUTURES_SETTLE_CHECK_SECONDS`),
+  a few futures a pass, and the live desk
   emails once when the cash on Polymarket US, or on either Kalshi shard it
   trades on, falls under `LIVE_LOW_CASH`;
 - every 5 minutes the live desk reads each venue's positions and logs any
@@ -501,9 +505,16 @@ like, is said not to trade: 109 of 3,000 markets the recorder followed on
 2026-10-07 came expired. Its trade feed was dropped
 on September 30, since trades came no sooner than the book that showed
 them. Both clients also report how a contract resolved, which the settler
-uses, and carry the live trading calls: the account's balance, and an
-immediate or cancel limit order whose answer they turn into an `Answer`,
-the same for both venues. Polymarket US prices every order on the long
+uses, as what a yes contract paid, from 0 to 1: Kalshi's result, or its
+settlement value when the result is `scalar`, as a drawn CS2 match paid
+0.60 on October 9, and on Polymarket US the long side's price once the
+market has resolved, which was 0.41 for the same match, the last fair
+price its rules pay on. Polymarket US costs a call per event, half a
+second apart (`RESULTS_SLEEP`), since its limit, which answered HTTP 429
+at about six calls a second on October 11, is shared with the live
+orders. Both clients carry the live trading calls: the account's balance,
+and an immediate or cancel limit order whose answer they turn into an
+`Answer`, the same for both venues. Polymarket US prices every order on the long
 side, so a short side order at p is sent at 1 - p, and when its answer does
 not say how an order ended, the order itself is looked up, since a returned
 order id does not mean the order is done. Both venues trade in hundredths
@@ -939,16 +950,31 @@ movement is a `Ledger` row that records the balance it left behind,
 starting with a `transfer_in` of each venue's opening balance, so the
 ledger accounts for every dollar and a restart reads the newest row instead
 of replaying history. From kickoff, every 30 seconds, the settler asks the
-venues how the contracts of open trades resolved, pays the winning leg a
-dollar a contract, and stores each leg's result, payout, and settlement
-time as the trade's `Settlement`, which is what a tax return needs. A trade
-still exposed on one side is settled as it stands, each leg paid for what
-it holds. The settler skips a trade while an order to flatten it is in
-flight, and once a trade settles the executor stops flattening it. The
-venue holding a winning leg receives the whole dollar, so the balances
-drift apart over time. Nothing moves money between venues: paper trades
-until a venue's cash runs out, and live emails when one runs low, for a
-human to move money by hand.
+venues how the contracts of open trades resolved, pays each leg what its
+contracts paid, and stores each leg's result, payout, and settlement time
+as the trade's `Settlement`, which is what a tax return needs. A trade with
+no game, a future, is asked about at every pass from its payout time, and
+before it once an hour (`FUTURES_SETTLE_CHECK_SECONDS`), since the venues
+settle many futures months early: an eliminated team's qualifier, an award
+for an eliminated player, season wins once decided. On October 11, 26 live
+futures waiting on payout times in 2027 had already settled at both
+venues, with $100 of capital in them. The hourly checks are spread over the
+passes, the futures asked about longest ago first and no more a pass than
+spread them all over the hour, so a restart adds a call or two to each
+pass rather than one burst. A contract pays a yes holder what the venue
+says a yes contract paid, from 0 to 1, and a no holder the rest of the
+dollar: a dollar or nothing as a rule, and part of one for a tie or a match
+settled at its last fair price. The `Settlement` stores the result as
+`yes` or `no` for a whole dollar or nothing, as every result before October
+11, and otherwise as the decimal a yes contract paid, `0.6` for 60 cents;
+the readers of results go by the payouts, or only ask whether a leg has a
+result. A trade still exposed on one side is settled as it stands, each
+leg paid for what it holds. The settler skips a trade while an order to
+flatten it is in flight, and once a trade settles the executor stops
+flattening it. The venue holding a winning leg receives the whole dollar,
+so the balances drift apart over time. Nothing moves money between venues:
+paper trades until a venue's cash runs out, and live emails when one runs
+low, for a human to move money by hand.
 
 Live money has no ledger of ours. `LiveBalances` reads each venue's balance
 every 15 seconds, which also keeps the venue's kept HTTPS connection warm

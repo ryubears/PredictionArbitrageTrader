@@ -195,7 +195,21 @@ def test_results_are_looked_up_in_batches_and_only_finalized_markets_count(monke
     monkeypatch.setattr(kalshi.time, "sleep", lambda s: None)
     out = kalshi.results(["c", "a", "b", "a"])
     assert calls == ["a,b", "c"]                                         # Sorted, deduplicated, two per call.
-    assert out == {"b": ("yes", "2026-09-25T03:23:29.072400+00:00")}    # 'a' and 'c' were first in their batch and still active.
+    assert out == {"b": (1.0, "2026-09-25T03:23:29.072400+00:00")}      # 'a' and 'c' were first in their batch and still active.
+
+
+def test_results_give_what_a_yes_contract_paid_part_of_a_dollar_for_a_scalar_result(monkeypatch):
+    at = "2026-10-09T19:37:23.645455Z"
+    markets = [{"ticker": "KXCS2GAME-26OCT081430BGAIM-BG", "status": "finalized", "result": "scalar", "settlement_value_dollars": "0.6000",
+                "settlement_ts": at},                                    # A drawn CS2 match, settled at the last fair price.
+               {"ticker": "KXMLBNLCSQUAL-26-SD", "status": "finalized", "result": "no", "settlement_value_dollars": "0.0000", "settlement_ts": at},
+               {"ticker": "W", "status": "finalized", "result": "yes", "settlement_ts": at},
+               {"ticker": "V", "status": "finalized", "result": "", "settlement_ts": at},                  # No result, as when voided.
+               {"ticker": "S", "status": "finalized", "result": "scalar", "settlement_ts": at}]            # A scalar result without its value.
+    monkeypatch.setattr(kalshi, "get_json", lambda url, params=None, retries=3: {"markets": markets})
+    out = kalshi.results([m["ticker"] for m in markets])
+    assert out == {"KXCS2GAME-26OCT081430BGAIM-BG": (0.6, "2026-10-09T19:37:23.645455+00:00"),
+                   "KXMLBNLCSQUAL-26-SD": (0.0, "2026-10-09T19:37:23.645455+00:00"), "W": (1.0, "2026-10-09T19:37:23.645455+00:00")}
 
 
 # TRADING

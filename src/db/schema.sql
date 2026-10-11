@@ -142,8 +142,10 @@ CREATE TABLE IF NOT EXISTS settlements (
     trade_id       INTEGER PRIMARY KEY,   -- The trade, see trades.
     mode           TEXT NOT NULL DEFAULT 'paper',   -- 'paper' or 'live', the trade's mode.
     settled_at     TEXT NOT NULL,         -- When both legs had resolved and the payouts were booked: the later leg's settlement.
-    yes_result     TEXT,                  -- How the yes leg's contract resolved, 'yes' or 'no'.
-    yes_payout     REAL,                  -- Dollars received on the yes leg, one per contract held when its side won.
+    yes_result     TEXT,                  -- How the yes leg's contract resolved, 'yes' or 'no', or the decimal a yes contract paid
+                                          -- when it paid part of a dollar, '0.6' for 60 cents, as for a tie or a drawn match.
+    yes_payout     REAL,                  -- Dollars received on the yes leg: a contract held pays what a yes contract paid when the
+                                          -- leg holds yes and the rest of the dollar when it holds no, so one or nothing as a rule.
     yes_settled_at TEXT,                  -- The venue's settlement time for the yes leg.
     no_result      TEXT,
     no_payout      REAL,

@@ -222,13 +222,35 @@ def markets(tickers):
             time.sleep(SLEEP)
 
 
+def yes_paid(market):
+    """
+    What a yes contract of a finalized market, as the markets call gives it,
+    paid, from 0 to 1: a dollar for a result of 'yes', nothing for 'no', and
+    for 'scalar' its settlement value, part of a dollar, as a drawn CS2
+    match paid 0.60 on 2026-10-09. None for a market not finalized, or with
+    no result or one not read here.
+    """
+    if market.get("status") != "finalized":
+        return None
+    result = market.get("result")
+    if result in ("yes", "no"):
+        return 1.0 if result == "yes" else 0.0
+    value = float_or_none(market.get("settlement_value_dollars")) if result == "scalar" else None
+    return value if value is not None and 0 <= value <= 1 else None
+
+
 def results(tickers):
     """
-    Settlement results for the tickers, as {ticker: (result, settled_at)} with result 'yes' or 'no', see markets().
+    Settlement results for the tickers, as {ticker: (paid, settled_at)} with
+    paid what a yes contract paid, from 0 to 1, see yes_paid() and markets().
     Markets not yet finalized are left out.
     """
-    return {m["ticker"]: (m["result"], iso(m.get("settlement_ts"))) for m in markets(tickers)
-            if m.get("status") == "finalized" and m.get("result") in ("yes", "no")}
+    out = {}
+    for m in markets(tickers):
+        value = yes_paid(m)
+        if value is not None:
+            out[m["ticker"]] = (value, iso(m.get("settlement_ts")))
+    return out
 
 
 def not_trading(status):
