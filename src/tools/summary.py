@@ -56,7 +56,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))     # src, so th
 from common.stats import quantile
 from common.timeutil import at_seconds, days_between, epoch, now_iso, shift
 from common.venues import is_maintenance
-from db.database import DB_PATH, read_only
+from db.database import DB_PATH, netted, read_only
 from db.schema import table_columns
 from engine.helper import config
 
@@ -322,28 +322,15 @@ def print_market_opportunities(conn, since, hours, sports, market):
                 largest)
 
 
-def netted(legs):
+def paid_back(legs):
     """
-    The contracts each venue has already paid back by netting, as {venue:
-    pairs}, from the legs open live trades hold, as (venue, contract, its
-    polarity, the side of the bet the leg holds, contracts held). Both
-    venues net a contract's yes and no holdings into one position and pay
-    a dollar a pair at once, so when a later trade holds one outcome of a
-    contract an earlier open trade holds the other of, on the same venue,
-    those pairs are back in cash, though our records count what they cost
-    until both trades settle. A contract's pairs are the smaller of the
-    contracts held on its yes and on its no, which outcome a leg holds
-    being Leg.outcome's. On 2026-10-11 they were 443.51 on Polymarket US
-    and 29.59 on Kalshi, of the 3,601.57$ open live trades held.
+    The contracts each venue has already paid back by netting what open
+    live trades hold, as {venue: pairs}, see database.netted(), from their
+    legs as (venue, contract, its polarity, the side of the bet the leg
+    holds, contracts held): a leg holds its contract's yes when its side is
+    the contract's polarity, as Leg.outcome says, and its no otherwise.
     """
-    held = {}
-    for venue, contract_id, polarity, side, contracts in legs:
-        outcomes = held.setdefault((venue, contract_id), {"yes": 0.0, "no": 0.0})
-        outcomes["yes" if side == polarity else "no"] += contracts
-    pairs = {}
-    for (venue, _), outcomes in held.items():
-        pairs[venue] = pairs.get(venue, 0.0) + min(outcomes.values())
-    return {venue: round(n, 2) for venue, n in sorted(pairs.items()) if round(n, 2)}
+    return netted((venue, contract_id, contracts if side == polarity else -contracts) for venue, contract_id, polarity, side, contracts in legs)
 
 
 def print_open_trades(conn, since, hours, mode, market, sports, now):
@@ -352,7 +339,7 @@ def print_open_trades(conn, since, hours, mode, market, sports, now):
     contracts still held cost with fees, and the expected profit what the trades locked in, a dollar for each pair held
     less what it cost, with what flattening made or lost. A contract held without its other side, which the held column
     shows, is counted at its cost, as if it broke even. Live's capital then leaves out the dollar a pair the venues have
-    already paid back by netting opposite holdings of a contract, see netted(), on each venue too, since that money is
+    already paid back by netting opposite holdings of a contract, see paid_back(), on each venue too, since that money is
     back in cash; paper's books do not net. The return on capital and its rate a year are on what is still held, the
     rate scaling each trade's return over the days from the trade to its payout, weighted by capital. They resolve from
     the first payout, which may be past and waiting on a venue, to the last, and the average weighted by capital is when
@@ -386,7 +373,7 @@ def print_open_trades(conn, since, hours, mode, market, sports, now):
         group = [r for r in rows if days_between(r[9], now) * 24 <= window]
         opened.append((f"opened in the last {name}", f"{len(group):,}", f"{sum(r[5] + r[7] for r in group):,.2f}$"))
     widths = [max(len(o[i]) for o in opened) for i in range(3)]
-    paid = netted(legs) if mode == "live" else {}
+    paid = paid_back(legs) if mode == "live" else {}
     still = capital - sum(paid.values())        # What the trades still hold, once netting paid its pairs back.
     ret, annual = (100 * profit / still, 100 * yearly / still) if still > 0 else (None, None)
     held = ", ".join(f"{venue} {amount - paid.get(venue, 0.0):,.2f}$" for venue, amount in sorted(venues.items()))
