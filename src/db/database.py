@@ -383,17 +383,54 @@ def load_held(conn, mode):
     """
     Dollars the unsettled trades of one mode hold on each venue, at what
     their legs paid for the contracts they still hold, as {venue: dollars},
-    for the brakes.
+    for the brakes. Pairs a venue has already paid back by netting are
+    still in it, see load_netted().
     """
     rows = conn.execute(f"SELECT venue, SUM(cost) FROM ({HELD_LEGS}) GROUP BY venue", {"mode": mode})
     return {venue: dollars for venue, dollars in rows}
+
+
+def netted(legs):
+    """
+    The contracts each venue has already paid back by netting, as {venue:
+    pairs}, from legs as (venue, contract_id, contracts), positive for the
+    contract's yes and negative for its no, as HELD_LEGS gives them. Both
+    venues net a contract's yes and no holdings into one position and pay
+    a dollar a pair at once, so when a later trade holds one outcome of a
+    contract an earlier open trade holds the other of, on the same venue,
+    those pairs are back in cash, though our records count what they cost
+    until both trades settle. A contract's pairs are the smaller of the
+    contracts held on its yes and on its no, and the same id on two venues
+    never nets. Only the venues pay them back: paper's books do not net.
+    On 2026-10-11 they were 443.51 on Polymarket US and 29.59 on Kalshi,
+    of the 3,601.57$ open live trades held.
+    """
+    held = {}
+    for venue, contract_id, contracts in legs:
+        outcomes = held.setdefault((venue, contract_id), {"yes": 0.0, "no": 0.0})
+        outcomes["yes" if contracts > 0 else "no"] += abs(contracts)
+    pairs = {}
+    for (venue, _), outcomes in held.items():
+        pairs[venue] = pairs.get(venue, 0.0) + min(outcomes.values())
+    return {venue: round(n, 2) for venue, n in sorted(pairs.items()) if round(n, 2)}
+
+
+def load_netted(conn, mode):
+    """
+    The pairs each venue has already paid back by netting what the
+    unsettled trades of one mode hold, as {venue: pairs}, a dollar each,
+    see netted(), for the brakes, which ask it of live alone.
+    """
+    return netted(conn.execute(f"SELECT venue, contract_id, contracts FROM ({HELD_LEGS})", {"mode": mode}))
 
 
 def load_holdings(conn, mode):
     """
     What the unsettled trades of one mode hold of each contract, as
     {(venue, contract_id): contracts}, positive for the contract's yes and
-    negative for its no, to compare with the venues' own positions.
+    negative for its no, to compare with the venues' own positions. The
+    sum nets yes against no as the venues do, so it is held net of the
+    pairs they paid back, see netted(), like their positions.
     """
     rows = conn.execute(f"SELECT venue, contract_id, SUM(contracts) FROM ({HELD_LEGS}) GROUP BY venue, contract_id", {"mode": mode})
     return {(venue, contract_id): round(contracts, 2) for venue, contract_id, contracts in rows if round(contracts, 2)}

@@ -924,6 +924,18 @@ That is checked after each trade, each settlement, and each retry that
 sold something, not after a retry that sold nothing, which runs every
 second while a trade is exposed.
 
+The live money is the cash on both venues and what open live trades hold,
+at cost, less a dollar for each pair the venues have already paid back.
+Both net a contract's yes and no into one position and pay a dollar a pair
+at once, so when a later trade holds the other outcome of a contract an
+earlier open one holds, on the same venue, the smaller of the two is back
+in cash though both trades still count what it cost until they settle. A
+dollar a pair, not what the pairs cost, keeps the live money what it would
+be had the venues not netted. Until 2026-10-12 the brakes counted those
+pairs twice, in the cash and at cost: about 473$ of the 3,601.57$ open
+live trades held on 2026-10-11, which made the halt on losses looser than
+meant.
+
 A trade is decided once its legs hold the same number of contracts, which
 pay a dollar each whichever way the game goes, or once it settles. Each
 rule reads the orders and trades tables, so a restart does not reset it,
