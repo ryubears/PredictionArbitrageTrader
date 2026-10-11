@@ -141,22 +141,24 @@ def test_each_market_shows_under_its_heading_its_opportunities_then_paper_then_l
     assert [out.index(f"\n{head}") for head in heads] == sorted(out.index(f"\n{head}") for head in heads)
 
 
-def test_settled_legs_count_by_when_each_leg_settled(tmp_path, monkeypatch, capsys):
+def test_a_markets_trades_show_by_kind_largest_open_ones_opened_by_outcome_then_the_open_trades(tmp_path, monkeypatch, capsys):
     def fill(conn):
-        for yes_at, no_at, no_held in ((BEFORE, INSIDE, 10.1), (BEFORE, INSIDE, 0.2), (BEFORE, BEFORE, 10)):
-            t = Trade(mode="paper", pair_id=1, trade="t", signal_ts=BEFORE, edge=0.08, quantity=10,
-                      yes_venue="polymarket_us", yes_contract="pm", yes_polarity="yes", yes_limit=0.45,
-                      no_venue="kalshi", no_contract="k", no_polarity="yes", no_limit=0.47, pays_at=BEFORE,
-                      yes_held=10, no_held=no_held, yes_cost=4.5, no_cost=4.7, status="filled")
-            database.insert_trade(conn, t)
-            s = Settlement(t.id, max(yes_at, no_at), mode="paper")
-            s.record("yes", "yes", 10.0, yes_at)
-            s.record("no", "no", 0.0, no_at)
-            database.insert_settlement(conn, s)
-    out = report(tmp_path, monkeypatch, capsys, fill, modes=("paper",))
-    # Only the first two trades' no legs, on Kalshi, settled in the window. Their yes legs settled before it, as did the third
-    # trade. Their contracts, 10.299999999999999 as summed, show to the hundredth.
-    assert table(out, "paper futures settled legs by venue, last 12 hours") == [["kalshi", "2", "10.3", "9.4", "0.0", "-9.4"]]
+        open_trades(conn)
+        # One settled in the window, whose legs no table lists by venue any more.
+        t = held_trade(conn, signal=INSIDE, held=(10, 10), cost=(4.5, 4.7), profit=0.80)
+        s = Settlement(t.id, INSIDE, mode="live")
+        s.record("yes", "yes", 10.0, INSIDE)
+        s.record("no", "no", 0.0, INSIDE)
+        database.insert_settlement(conn, s)
+        database.insert_order(conn, Order(trade_id=t.id, venue="kalshi", contract_id="k", purpose="open", action="buy", outcome="yes",
+                                          quantity=10, limit_price=0.45, client_id="c1", sent_at=INSIDE, status="filled", filled=10,
+                                          dollars=4.5, book_ts=INSIDE))
+    out = report(tmp_path, monkeypatch, capsys, fill)
+    heads = ["live futures trades: ", "  net ", "live futures by kind, last 12 hours", "live futures largest trades, last 12 hours",
+             "live futures open trades opened in the last 12 hours, newest first", "live futures by outcome, last 12 hours",
+             "live futures open trades: ", "  opened in the last hour", "  resolving first"]
+    assert [out.index(f"\n{head}") for head in heads] == sorted(out.index(f"\n{head}") for head in heads)
+    assert "settled legs" not in out and "orders" not in out
 
 
 def test_live_money_shows_each_venue_read_now_with_the_kalshi_shards(capsys):
@@ -221,14 +223,11 @@ def test_open_trades_keep_to_the_mode_and_sports(tmp_path, monkeypatch, capsys):
     assert [r[:3] for r in table(out, "live futures open trades opened in the last 12 hours, newest first")] == [["6", "other", "bet"], ["7", "other", "bet"]]
 
 
-def test_open_trades_none_opened_in_the_window_say_so(tmp_path, monkeypatch, capsys):
-    out = report(tmp_path, monkeypatch, capsys, lambda conn: open_trades(conn))
-    assert "  none opened in the last" not in out
-    out = report(tmp_path / "b", monkeypatch, capsys, lambda conn: database.insert_trade(conn, Trade(
-        mode="live", pair_id=1, trade="t", signal_ts=BEFORE, edge=0.06, quantity=5, yes_venue="kalshi", yes_contract="k",
-        yes_polarity="yes", yes_limit=0.5, no_venue="polymarket_us", no_contract="p", no_polarity="yes", no_limit=0.45,
-        pays_at="2026-12-20T00:00:00+00:00", yes_held=5, no_held=5, yes_cost=2.5, no_cost=2.25, profit=0.25, status="filled")))
-    assert out.split("\nlive futures open trades: ")[1].splitlines()[7] == "  none opened in the last 12 hours"
+def test_open_trades_none_opened_in_the_window_list_no_table(tmp_path, monkeypatch, capsys):
+    out = report(tmp_path, monkeypatch, capsys, lambda conn: held_trade(conn, signal=BEFORE, profit=0.25))
+    assert "open trades opened in the last" not in out
+    # The open trades still close the market, as its last lines.
+    assert out.split("\nlive futures open trades: ")[1].splitlines()[:2] == ["1", "  opened in the last hour  0 using 0.00$"]
 
 
 def test_contract_counts_show_to_the_hundredth_without_float_noise():
@@ -258,8 +257,7 @@ def test_outcomes_show_filled_then_partial_then_failed(tmp_path, monkeypatch, ca
                                               status=status))
     out = report(tmp_path, monkeypatch, capsys, fill)
     assert [r[0] for r in table(out, "live futures by outcome, last 12 hours")] == ["filled", "partial", "failed"]
-    assert sorted(["sent", "unfilled", "partial", "error", "filled", "new"], key=summary.by_status) == [
-        "filled", "partial", "unfilled", "error", "sent", "new"]
+    assert sorted(["sent", "failed", "partial", "filled", "new"], key=summary.by_status) == ["filled", "partial", "failed", "sent", "new"]
 
 
 def test_feed_drops_follow_the_pairs_after_a_blank_line(tmp_path, monkeypatch, capsys):
@@ -269,52 +267,51 @@ def test_feed_drops_follow_the_pairs_after_a_blank_line(tmp_path, monkeypatch, c
     assert out == "\nfeed drops, last 12 hours\n  none\n"
 
 
-def test_trades_and_orders_show_the_futures_and_the_games_in_play_apart_with_the_largest_first(tmp_path, monkeypatch, capsys):
+def test_trades_show_the_futures_and_the_games_in_play_apart_with_the_largest_first(tmp_path, monkeypatch, capsys):
     def fill(conn):
         for pair_id, held, cost in ((1, 5, 2.5), (3, 2, 1.0), (3, 8, 4.0)):     # A future, then two trades on a game under way.
-            t = Trade(mode="live", pair_id=pair_id, trade="t", signal_ts=INSIDE, edge=0.06, quantity=10, yes_venue="kalshi",
-                      yes_contract="k", yes_polarity="yes", yes_limit=0.5, no_venue="polymarket_us", no_contract="p",
-                      no_polarity="yes", no_limit=0.45, pays_at="2026-12-20T00:00:00+00:00", yes_held=held, no_held=held,
-                      yes_cost=cost, no_cost=cost, matched=held, profit=0.06 * held, status="partial")
-            database.insert_trade(conn, t)
-            database.insert_order(conn, Order(trade_id=t.id, venue="polymarket_us", contract_id="p", purpose="open", action="buy",
-                                              outcome="yes", quantity=10, limit_price=0.45, client_id=f"c{t.id}", sent_at=INSIDE,
-                                              status="partial", latency_ms=60, filled=held, dollars=cost))
+            database.insert_trade(conn, Trade(mode="live", pair_id=pair_id, trade="t", signal_ts=INSIDE, edge=0.06, quantity=10,
+                                              yes_venue="kalshi", yes_contract="k", yes_polarity="yes", yes_limit=0.5,
+                                              no_venue="polymarket_us", no_contract="p", no_polarity="yes", no_limit=0.45,
+                                              pays_at="2026-12-20T00:00:00+00:00", yes_held=held, no_held=held,
+                                              yes_cost=cost, no_cost=cost, matched=held, profit=0.06 * held, status="partial"))
     out = report(tmp_path, monkeypatch, capsys, fill)
     assert "\nlive futures trades: 1 in all, 1 in the last 12 hours" in out and "\nlive in-play trades: 2 in all, 2 in the last 12 hours" in out
     assert [r[:3] + r[-6:] for r in table(out, "live futures largest trades, last 12 hours")] == [
         ["1", "the", "bet", "5", "10", "5.00", "0.30", "0.30", "2026-12-20"]]
     # The most capital first.
     assert [(r[0], r[-6]) for r in table(out, "live in-play largest trades, last 12 hours")] == [("3", "8"), ("2", "2")]
-    assert table(out, "live futures orders, last 12 hours") == [["polymarket_us", "open", "partial", "1", "10", "5", "2.5", "0.0", "60.0"]]
-    assert [r[3:6] for r in table(out, "live in-play orders, last 12 hours")] == [["2", "20", "10"]]
-    assert out.index("\nlive futures orders") < out.index("\nlive in-play trades: ")
+    assert out.index("\nlive futures open trades: ") < out.index("\n===== in-play =====")
 
 
-def test_live_orders_to_open_are_shown_by_how_long_the_book_had_sent_nothing(tmp_path, monkeypatch, capsys):
+def test_totals_add_up_each_markets_trades_since_the_first_settled_and_open(tmp_path, monkeypatch, capsys):
     def fill(conn):
-        t = Trade(mode="live", pair_id=3, trade="t", signal_ts=INSIDE, edge=0.06, quantity=5, yes_venue="kalshi", yes_contract="k",
-                  yes_polarity="yes", yes_limit=0.5, no_venue="polymarket_us", no_contract="p", no_polarity="yes", no_limit=0.45,
-                  pays_at="2026-09-28T00:00:00+00:00")
-        database.insert_trade(conn, t)
-        for i, (venue, outcome, book_ts, purpose, filled) in enumerate([
-                ("polymarket_us", "no", "2026-09-27T19:59:59.800000+00:00", "open", 0),     # Quiet for 0.2s.
-                ("polymarket_us", "no", "2026-09-27T19:59:59.500000+00:00", "open", 5),     # 0.5s.
-                ("polymarket_us", "no", "2026-09-27T19:59:48+00:00", "open", 0),            # 12s.
-                ("polymarket_us", "yes", "2026-09-27T19:59:20+00:00", "open", 5),           # 40s.
-                ("kalshi", "yes", "2026-09-27T19:59:59.990000+00:00", "open", 5),
-                ("kalshi", "yes", None, "open", 5),                                         # From before the times were kept.
-                ("kalshi", "yes", "2026-09-27T19:59:59.990000+00:00", "flatten", 5)]):      # Not an order to open.
-            database.insert_order(conn, Order(trade_id=t.id, venue=venue, contract_id="c", purpose=purpose, action="buy", outcome=outcome,
-                                              quantity=5, limit_price=0.5, client_id=f"c{i}", sent_at=INSIDE, status="filled" if filled else "unfilled",
-                                              filled=filled, book_ts=book_ts))
-    out = report(tmp_path, monkeypatch, capsys, fill)
-    assert table(out, "live in-play orders to open by how long the book had sent nothing, last 12 hours") == [
-        ["kalshi", "yes", "0-1s", "1", "1", "100", "5", "5"],
-        ["polymarket_us", "no", "0-1s", "2", "1", "50", "10", "5"],
-        ["polymarket_us", "no", "5-30s", "1", "0", "0", "5", "0"],
-        ["polymarket_us", "yes", "30s+", "1", "1", "100", "5", "5"]]
-    assert "live futures orders to open" not in out
+        # Settled ten days after it opened, balanced: 9.20$ in, 0.80$ back.
+        t = held_trade(conn, held=(10, 10), cost=(4.5, 4.7), profit=0.80)
+        s = Settlement(t.id, "2026-10-07T11:00:00+00:00", mode="live")
+        s.record("yes", "yes", 10.0, s.settled_at)
+        s.record("no", "no", 0.0, s.settled_at)
+        database.insert_settlement(conn, s)
+        held_trade(conn, profit=0.25, pays_at="2026-10-17T11:00:00+00:00")      # Open, 4.75$ expected to make 0.25$ over 20 days.
+        held_trade(conn, signal=INSIDE, held=(0, 0), cost=(0, 0), hedge=-0.05, status="failed")   # Flattened to nothing.
+        held_trade(conn, held=(5, 5), status="sent")                            # Still in flight, left out.
+        held_trade(conn, mode="paper", profit=9.0)                              # Paper's, apart.
+        # A game's, settled six hours after it opened, one more on the yes, which won: 1.40$ in, 2.00$ back.
+        t = held_trade(conn, pair_id=3, signal=INSIDE, held=(2, 1), cost=(0.9, 0.5), profit=0.05, status="partial")
+        s = Settlement(t.id, "2026-09-28T02:00:00+00:00", mode="live")
+        s.record("yes", "yes", 2.0, s.settled_at)
+        s.record("no", "yes", 0.0, s.settled_at)
+        database.insert_settlement(conn, s)
+    report(tmp_path, monkeypatch, capsys, fill)
+    summary.print_totals(database.read_only(tmp_path / "t.sqlite"), "live", summary.MARKETS, ())
+    out = capsys.readouterr().out
+    # Futures: 1.00$ on 13.95$ is 7.2%. Its dollar-days are 9.20$ x 10 + 4.75$ x 20 = 187, so a year makes 365 / 187 of it,
+    # 195.2%. In play: 0.60$ on 1.40$, 42.9%, over 1.40$ x 0.25 days, 62,571.4% a year.
+    assert table(out, "live totals since the first trade, on 2026-09-27, settled and open") == [
+        ["futures", "1", "1", "13.95", "1.00", "7.2", "195.2"],
+        ["in-play", "1", "0", "1.40", "0.60", "42.9", "62,571.4"]]
+    summary.print_totals(database.read_only(tmp_path / "t.sqlite"), "live", summary.MARKETS, ("nba",))
+    assert capsys.readouterr().out == "\nlive totals since the first trade: none\n"
 
 
 def test_a_market_filter_shows_only_the_futures_or_only_the_games_in_play(tmp_path, monkeypatch, capsys):

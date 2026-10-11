@@ -869,8 +869,8 @@ once for 18.8 seconds through four orders, all of which paper filled. A
 market halted during a play with its last book still up would look like
 that, since a book counts as current in play for up to `MAX_BOOK_AGE`, 60
 seconds, without a change. Since 2026-10-05 every live order stores when
-its book last changed, and the summary shows how often orders took
-something by how long the book had been quiet, to tell.
+its book last changed, and until 2026-10-12 the summary showed how often
+orders took something by how long the book had been quiet, to tell.
 
 **In-play rules.** Since 2026-10-06, at the user's asking, live on a game
 under way takes an edge of two cents or more (`LIVE_IN_PLAY_MIN_EDGE`), and
@@ -1055,17 +1055,17 @@ contracts of the trades settled in it made or lost, their payouts less
 their costs and locked-in profit. A balanced trade realizes its profit to
 the cent, and until 2026-10-11 what the exposed ones made, -3.93$ on
 futures and 0.33$ in play over all live trades, showed only in the legs
-settled by venue. Then the trades by outcome, filled, partial, then
-failed, and by sport and kind in the window, the five holding the most
-capital, the legs settled in it by venue, and the open trades: in a few
-lines, how many, how many of them opened in the last hour, day, and week
+settled by venue, a table dropped on 2026-10-12. Then the trades by sport
+and kind in the window, the five holding the most capital, a table of each
+open trade opened in the window, newest first, with what it holds, its
+capital, expected profit and rates, and when it pays, then the trades by
+outcome, filled, partial, then failed, and last the open trades in a few
+lines: how many, how many of them opened in the last hour, day, and week
 and the capital those still hold, the capital they all hold and what is
 still held of it on each venue, and the profit they are expected to return
 on that with its rate a year weighted by capital, and the first, average,
 and last dates they resolve, the first maybe past and waiting on a venue,
-the average weighted by capital; then a table of each open trade
-opened in the window, newest first, with what it holds, its capital,
-expected profit and rates, and when it pays. Both venues net a contract's
+the average weighted by capital. Both venues net a contract's
 yes and no into one position and pay a dollar a pair at once, so when a
 later live trade holds the other outcome of a contract an earlier open one
 holds, on the same venue, the smaller of the two is back in cash though
@@ -1074,14 +1074,24 @@ out, a dollar each: on 2026-10-11 the open live trades cost 3,601.57$, of
 which 443.51 pairs on Polymarket US and 29.59 on Kalshi were already paid
 back, against the venues' own 3,026.17$ cost of open positions, most of
 the rest being trades whose markets had already resolved. Paper's books do
-not net. Live's trades end with its
-real orders sent by venue and what came back, then its orders to open by
-venue, the side they bought, and how long the venue had sent nothing for
-the market when each went out (0-1, 1-5, 5-30, 30+ seconds), with how many
-took something. The paper money from the ledger and the live balances read
-from the venues now, with Kalshi's shards, come last. Each section is a
-title line with its details on indented lines under it, and a long list,
-such as the pairs of each sport, wraps at 100 characters. `--hours` sets
+not net. Until 2026-10-12 live's trades ended with its real orders by
+venue and by how long the book had sent nothing when each went out.
+
+After every market come each mode's totals since its first trade, a row
+for the futures and one for the games in play: how many trades settled and
+how many are open, the capital they put in, what they returned or are
+expected to, and that as a share of the capital and a rate a year. A
+settled trade returns what its legs paid less what its contracts cost,
+with its hedge, so what its exposed contracts made or lost counts; an open
+one what it locked in with its hedge; and one flattened to nothing its
+hedge alone. Each trade's capital counts on its own, not netted, since
+netting pays back pairs held at the same time. The rate a year is the
+return on each dollar for each day it was out: the return over the sum of
+each trade's capital times the days from the trade to its settlement or,
+still open, its payout, times 365. The paper money from the ledger and the
+live balances read from the venues now, with Kalshi's shards, come last.
+Each section is a title line with its details on indented lines under it,
+and a long list, such as the pairs of each sport, wraps at 100 characters. `--hours` sets
 the window, `--sport nfl,ncaaf` narrows everything to some sports, and
 `--no-live` leaves out the live balances.
 

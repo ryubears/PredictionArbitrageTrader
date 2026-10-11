@@ -19,18 +19,18 @@ in, overall, by sport and kind, and the largest, and how long the edge
 stayed at config.MIN_EDGE or more, in seconds to the thousandth. A
 market's trades show their net for the window, what the trades opened in
 it locked in and hedged with what exposed contracts made or lost settling
-in it, then by outcome and by kind for the window, the largest, the legs
-settled in it, and the open trades: in a few lines, how many, how many of
-them opened in the last hour, day, and week and the capital those hold,
-the capital they all hold, less what netting on the venues has already
-paid back of live's, and the profit they are expected to return on it,
-its rate a year, and when they resolve, then each one opened in the
-window. Live's orders follow its trades, then its orders to open by
-how long the venue's book had sent nothing when each went out, and how
-many of those took something. The paper money and the live money come
-last. --market narrows everything to the futures or the games in play,
-and --sport to some sports. Reads only, so it is safe to run while the
-live process is writing.
+in it, then by kind for the window, the largest, each open trade opened
+in it, the trades by outcome, and last the open trades in a few lines:
+how many, how many of them opened in the last hour, day, and week and the
+capital those hold, the capital they all hold, less what netting on the
+venues has already paid back of live's, and the profit they are expected
+to return on it, its rate a year, and when they resolve. After every
+market come each mode's totals since its first trade, for the futures
+and the games in play apart: the capital its trades, settled and open,
+put in, what they returned or are expected to, and its rate a year. The
+paper money and the live money come last. --market narrows everything to
+the futures or the games in play, and --sport to some sports. Reads only,
+so it is safe to run while the live process is writing.
 
 The script sets its own import path, so it runs from any folder. The live
 money is not in the database but on the venues, so it is read from each
@@ -66,11 +66,7 @@ MARKET_CHOICES = {"futures": ("futures",), "in-play": ("in-play",), "all": MARKE
 LARGEST = 5         # The largest opportunities and trades listed.
 OPENED_HOURS = {"hour": 1, "day": 24, "week": 24 * 7}     # The windows the open trades are counted as opened in.
 WIDTH = 100         # The longest line a list of items wraps at.
-BOOK_AGES = ((1, "0-1s"), (5, "1-5s"), (30, "5-30s"), (None, "30s+"))    # How long a venue had sent nothing for a market
-                                                                            # when an order went out, by upper bound in seconds.
-# The order trade and order statuses are shown in, best first: a trade is filled, partial, or failed, and an order
-# filled, partial, or one of the ways it took nothing. One not listed comes last.
-STATUSES = ("filled", "partial", "failed", "unfilled", "unfunded", "closed", "rejected", "error", "sent")
+STATUSES = ("filled", "partial", "failed", "sent")     # The order trade statuses are shown in, best first. One not listed comes last.
 
 
 def query_rows(conn, sql, params=()):
@@ -333,41 +329,70 @@ def paid_back(legs):
     return netted((venue, contract_id, contracts if side == polarity else -contracts) for venue, contract_id, polarity, side, contracts in legs)
 
 
-def print_open_trades(conn, since, hours, mode, market, sports, now):
+def load_open_trades(conn, mode, market, sports):
     """
-    The open trades of one mode in one market in a few lines, then each one opened in the window, newest first. Capital is what the
-    contracts still held cost with fees, and the expected profit what the trades locked in, a dollar for each pair held
-    less what it cost, with what flattening made or lost. A contract held without its other side, which the held column
-    shows, is counted at its cost, as if it broke even. Live's capital then leaves out the dollar a pair the venues have
-    already paid back by netting opposite holdings of a contract, see paid_back(), on each venue too, since that money is
-    back in cash; paper's books do not net. The return on capital and its rate a year are on what is still held, the
-    rate scaling each trade's return over the days from the trade to its payout, weighted by capital. They resolve from
-    the first payout, which may be past and waiting on a venue, to the last, and the average weighted by capital is when
-    the money comes back on average.
+    The open trades of one mode in one market, those holding contracts with no settlement, soonest to pay first, as
+    tuples for print_opened_in_window() and print_open_trades().
     """
     where, params = in_sports(sports)
-    rows = query_rows(conn, f"""
+    return query_rows(conn, f"""
         SELECT t.id, p.label, t.yes_held, t.no_held, t.yes_venue, t.yes_cost, t.no_venue, t.no_cost, t.profit + t.hedge_pnl,
                t.signal_ts, t.pays_at, t.yes_contract, t.yes_polarity, t.no_contract, t.no_polarity
         FROM trades t JOIN pairs p ON p.id = t.pair_id
         WHERE t.mode = ? AND t.yes_held + t.no_held > 0 AND NOT EXISTS (SELECT 1 FROM settlements s WHERE s.trade_id = t.id)
           {in_market(market)}{where}
         ORDER BY t.pays_at, t.id""", (mode,) + params)
+
+
+def held_days(signal, pays):
+    """
+    The days from a trade to its payout, an hour at the least, which its return a year is scaled over.
+    """
+    return max(days_between(signal, pays), 1 / 24)
+
+
+def print_opened_in_window(rows, since, hours, mode, market):
+    """
+    Each open trade of rows, see load_open_trades(), opened in the window, newest first, with what it holds, its
+    capital, the profit it is expected to return with its rates, and when it pays, or nothing when none was.
+    """
+    body = []
+    for trade_id, label, yes, no, _, yes_cost, _, no_cost, pr, signal, pays, *_ in rows:
+        if signal >= since:
+            cap = yes_cost + no_cost
+            ret, annual = returns(cap, pr, held_days(signal, pays))
+            body.append((signal, trade_id, label[:44], short_time(signal)[:16], f"{contracts(yes)}/{contracts(no)}", f"{cap:,.2f}",
+                         f"{pr:,.2f}", percent(ret), percent(annual), pays[:10]))
+    if body:
+        body.sort(reverse=True)
+        print_table(f"{mode} {market} open trades opened in the last {hours} hours, newest first",
+                    ("trade", "bet", "opened UTC", "held yes/no", "capital $", "profit $", "return %", "annual %", "pays"),
+                    [r[1:] for r in body], left=3)
+
+
+def print_open_trades(rows, mode, market, now):
+    """
+    The open trades of rows, see load_open_trades(), in a few lines. Capital is what the contracts still held cost
+    with fees, and the expected profit what the trades locked in, a dollar for each pair held less what it cost, with
+    what flattening made or lost. A contract held without its other side, which the held column shows, is counted at
+    its cost, as if it broke even. Live's capital then leaves out the dollar a pair the venues have already paid back
+    by netting opposite holdings of a contract, see paid_back(), on each venue too, since that money is back in cash;
+    paper's books do not net. The return on capital and its rate a year are on what is still held, the rate scaling
+    each trade's return over the days from the trade to its payout, weighted by capital. They resolve from the first
+    payout, which may be past and waiting on a venue, to the last, and the average weighted by capital is when the
+    money comes back on average.
+    """
     if not rows:
         print(f"\n{mode} {market} open trades: none")
         return
-    capital, profit, yearly, when, venues, legs, body = 0.0, 0.0, 0.0, 0.0, {}, [], []
+    capital, profit, yearly, when, venues, legs = 0.0, 0.0, 0.0, 0.0, {}, []
     for trade_id, label, yes, no, yes_venue, yes_cost, no_venue, no_cost, pr, signal, pays, yes_contract, yes_polarity, no_contract, no_polarity in rows:
-        cap, days = yes_cost + no_cost, max(days_between(signal, pays), 1 / 24)
-        capital, profit, yearly = capital + cap, profit + pr, yearly + pr * 365 / days
+        cap = yes_cost + no_cost
+        capital, profit, yearly = capital + cap, profit + pr, yearly + pr * 365 / held_days(signal, pays)
         when += cap * epoch(pays)
         for venue, cost in ((yes_venue, yes_cost), (no_venue, no_cost)):
             venues[venue] = venues.get(venue, 0.0) + cost
         legs += [(yes_venue, yes_contract, yes_polarity, "yes", yes), (no_venue, no_contract, no_polarity, "no", no)]
-        if signal >= since:
-            ret, annual = returns(cap, pr, days)
-            body.append((signal, trade_id, label[:44], short_time(signal)[:16], f"{contracts(yes)}/{contracts(no)}", f"{cap:,.2f}",
-                         f"{pr:,.2f}", percent(ret), percent(annual), pays[:10]))
     opened = []
     for name, window in OPENED_HOURS.items():
         group = [r for r in rows if days_between(r[9], now) * 24 <= window]
@@ -386,67 +411,6 @@ def print_open_trades(conn, since, hours, mode, market, sports, now):
         print(f"  capital {capital:,.2f}$, held on {held}")
     print(f"  expected to return {profit:,.2f}$ in profit, {percent(ret)}% on capital, {percent(annual)}% a year")
     print(f"  resolving first {rows[0][10][:10]}, on average {at_seconds(when / capital)[:10] if capital > 0 else '-'}, last {rows[-1][10][:10]}")
-    if not body:
-        print(f"  none opened in the last {hours} hours")
-        return
-    body.sort(reverse=True)
-    print_table(f"{mode} {market} open trades opened in the last {hours} hours, newest first",
-                ("trade", "bet", "opened UTC", "held yes/no", "capital $", "profit $", "return %", "annual %", "pays"),
-                [r[1:] for r in body], left=3)
-
-
-def print_live_orders(conn, since, hours, market, sports):
-    """
-    The real orders sent in the window for the trades of one market, by venue, purpose, and what came back.
-    """
-    where, params = in_sports(sports)
-    body = query_rows(conn, f"""
-        SELECT o.venue, purpose, o.status, COUNT(*), SUM(o.quantity), SUM(filled), ROUND(SUM(dollars), 2), ROUND(SUM(fees), 2), ROUND(AVG(latency_ms))
-        FROM orders o JOIN trades t ON t.id = o.trade_id JOIN pairs p ON p.id = t.pair_id WHERE sent_at >= ?{in_market(market)}{where}
-        GROUP BY o.venue, purpose, o.status""", (since,) + params)
-    body.sort(key=lambda r: (r[0], r[1], by_status(r[2])))
-    if body:
-        print_table(f"live {market} orders, last {hours} hours", ("venue", "purpose", "status", "orders", "asked", "filled", "dollars $", "fees $", "avg ms"),
-                    [(v, p, s, n, contracts(q), contracts(f), *rest) for v, p, s, n, q, f, *rest in body])
-
-
-def book_age(seconds):
-    """
-    The BOOK_AGES label for how many seconds a venue had sent nothing for a market.
-    """
-    return next(label for bound, label in BOOK_AGES if bound is None or seconds < bound)
-
-
-def print_book_ages(conn, since, hours, market, sports):
-    """
-    The real orders to open sent in the window for the trades of one market,
-    by venue, the side they bought, and how long the venue had sent nothing
-    for the market when they went out, see Order.book_ts, and how many of
-    them took something. A market that had gone quiet may have stopped
-    trading with its book still up. Orders from before the book times were
-    recorded, 2026-10-05, are left out, and so is the table on a database
-    the live process has not yet brought up to them.
-    """
-    if "book_ts" not in table_columns(conn, "orders"):
-        return
-    where, params = in_sports(sports)
-    rows = query_rows(conn, f"""
-        SELECT o.venue, o.outcome, o.sent_at, o.book_ts, o.quantity, o.filled
-        FROM orders o JOIN trades t ON t.id = o.trade_id JOIN pairs p ON p.id = t.pair_id
-        WHERE o.sent_at >= ? AND o.purpose = 'open' AND o.book_ts IS NOT NULL{in_market(market)}{where}""", (since,) + params)
-    groups = {}
-    for venue, outcome, sent_at, book_ts, quantity, filled in rows:
-        group = groups.setdefault((venue, outcome, book_age(epoch(sent_at) - epoch(book_ts))), [0, 0, 0.0, 0.0])
-        group[0] += 1
-        group[1] += filled > 0
-        group[2] += quantity
-        group[3] += filled
-    ages = [label for _, label in BOOK_AGES]
-    body = [(venue, outcome, age, n, took, f"{100 * took / n:.0f}", contracts(asked), contracts(filled))
-            for (venue, outcome, age), (n, took, asked, filled) in sorted(groups.items(), key=lambda kv: (kv[0][:2], ages.index(kv[0][2])))]
-    if body:
-        print_table(f"live {market} orders to open by how long the book had sent nothing, last {hours} hours",
-                    ("venue", "buying", "quiet", "orders", "took some", "%", "asked", "filled"), body, left=3)
 
 
 def exposure_settled(conn, since, mode, where, params):
@@ -461,8 +425,8 @@ def exposure_settled(conn, since, mode, where, params):
     A balanced trade realizes its profit to the cent, as all 1,891 balanced
     live trades settled by 2026-10-11 did, while the exposed ones had made
     -3.93$ on futures and 0.33$ in play, which until then showed only in
-    the legs settled by venue. A leg that held nothing has no payout and
-    cost nothing.
+    the legs settled by venue, a table dropped on 2026-10-12. A leg that
+    held nothing has no payout and cost nothing.
     """
     return query_rows(conn, f"""
         SELECT COUNT(*), COALESCE(SUM(COALESCE(s.yes_payout, 0) + COALESCE(s.no_payout, 0) - t.yes_cost - t.no_cost - t.profit), 0)
@@ -473,12 +437,14 @@ def exposure_settled(conn, since, mode, where, params):
 def print_market_trades(conn, since, hours, mode, market, sports, now):
     """
     One mode's trades in one market: how many, the net of the window, by
-    outcome and by kind in it, the largest, the legs settled in it, and the
-    open ones, then live's orders. The net is what the trades opened in the
-    window locked in and made or lost flattening, the tables' net, with
-    what exposed contracts made or lost at settlement in it, see
-    exposure_settled(), so each trade counts its profit when it opens and
-    its exposure when it settles.
+    kind in it, the largest, each open trade opened in it, the trades by
+    outcome, and last the open trades in a few lines. The net is what the
+    trades opened in the window locked in and made or lost flattening, the
+    tables' net, with what exposed contracts made or lost at settlement in
+    it, see exposure_settled(), so each trade counts its profit when it
+    opens and its exposure when it settles. Until 2026-10-12 live's orders
+    followed, by venue and by how long the book had sent nothing, and the
+    legs settled in the window by venue came before the open trades.
     """
     where, params = in_sports(sports)
     where = in_market(market) + where
@@ -491,13 +457,8 @@ def print_market_trades(conn, since, hours, mode, market, sports, now):
     if recent or exposed:
         print(f"  net {dollars(locked + exposure)}$: {dollars(locked)}$ locked in and hedged on the trades opened, "
               f"{dollars(exposure)}$ on the exposed contracts of {exposed:,} trades settled")
+    open_rows = load_open_trades(conn, mode, market, sports)
     if recent:
-        body = query_rows(conn, f"""
-            SELECT status, COUNT(*), SUM(quantity), SUM(matched), ROUND(SUM(profit), 2), ROUND(SUM(hedge_pnl), 2), ROUND(SUM(profit + hedge_pnl), 2)
-            {window} GROUP BY status""", args)
-        body.sort(key=lambda r: by_status(r[0]))
-        print_table(f"{mode} {market} by outcome, last {hours} hours", ("status", "trades", "wanted", "matched", "locked in $", "hedges $", "net $"),
-                    [(s, n, contracts(q), contracts(m), *rest) for s, n, q, m, *rest in body])
         body = query_rows(conn, f"""
             SELECT p.sport, p.kind, COUNT(*), ROUND(AVG(100 * edge), 1), ROUND(100.0 * SUM(matched) / SUM(quantity), 0),
                    ROUND(SUM(profit + hedge_pnl), 2), ROUND(AVG(julianday(pays_at) - julianday(signal_ts)), 1)
@@ -510,25 +471,63 @@ def print_market_trades(conn, since, hours, mode, market, sports, now):
                     ("trade", "bet", "opened UTC", "status", "matched", "wanted", "capital $", "locked in $", "net $", "pays"),
                     [(i, label[:44], short_time(signal)[:16], status, contracts(m), contracts(q), f"{cap:,.2f}", f"{pr:,.2f}", f"{net:,.2f}",
                       pays[:10]) for i, label, signal, status, m, q, cap, pr, net, pays in body], left=4)
-    # A settlement's settled_at is its later leg's, so a leg settled in the window is on a settlement that was too,
-    # which is checked first, before its trade is looked up.
-    settled = query_rows(conn, f"""
-        SELECT venue, COUNT(*), SUM(held), ROUND(SUM(cost), 2), ROUND(SUM(payout), 2), ROUND(SUM(payout - cost), 2) FROM (
-            SELECT t.yes_venue AS venue, t.yes_held AS held, t.yes_cost AS cost, s.yes_payout AS payout
-            FROM settlements s JOIN trades t ON t.id = s.trade_id JOIN pairs p ON p.id = t.pair_id
-            WHERE s.mode = ? AND s.settled_at >= ? AND s.yes_result IS NOT NULL AND s.yes_settled_at >= ?{where}
-            UNION ALL
-            SELECT t.no_venue, t.no_held, t.no_cost, s.no_payout
-            FROM settlements s JOIN trades t ON t.id = s.trade_id JOIN pairs p ON p.id = t.pair_id
-            WHERE s.mode = ? AND s.settled_at >= ? AND s.no_result IS NOT NULL AND s.no_settled_at >= ?{where})
-        GROUP BY venue ORDER BY venue""", (mode, since, since) + params + (mode, since, since) + params)
-    if settled:
-        print_table(f"{mode} {market} settled legs by venue, last {hours} hours", ("venue", "legs", "contracts", "cost $", "payout $", "realized $"),
-                    [(v, n, contracts(h), *rest) for v, n, h, *rest in settled])
-    print_open_trades(conn, since, hours, mode, market, sports, now)
-    if mode == "live":
-        print_live_orders(conn, since, hours, market, sports)
-        print_book_ages(conn, since, hours, market, sports)
+        print_opened_in_window(open_rows, since, hours, mode, market)
+        body = query_rows(conn, f"""
+            SELECT status, COUNT(*), SUM(quantity), SUM(matched), ROUND(SUM(profit), 2), ROUND(SUM(hedge_pnl), 2), ROUND(SUM(profit + hedge_pnl), 2)
+            {window} GROUP BY status""", args)
+        body.sort(key=lambda r: by_status(r[0]))
+        print_table(f"{mode} {market} by outcome, last {hours} hours", ("status", "trades", "wanted", "matched", "locked in $", "hedges $", "net $"),
+                    [(s, n, contracts(q), contracts(m), *rest) for s, n, q, m, *rest in body])
+    print_open_trades(open_rows, mode, market, now)
+
+
+def print_totals(conn, mode, markets, sports):
+    """
+    One mode's trades since its first, settled and open, for each market
+    apart: how many settled and how many are open, the capital they put in,
+    what they returned or are expected to, and that as a share of the
+    capital and a rate a year. A trade's capital is what the contracts it
+    holds cost with fees, the part flattening sold back being in its hedge.
+    A settled trade returns what its legs paid less that capital, with its
+    hedge, which counts what its exposed contracts made or lost; an open
+    one is expected to return what it locked in with its hedge, a contract
+    held without its other side counted as breaking even, as with the open
+    trades. A trade flattened to nothing put in no capital but returns its
+    hedge. The capital is each trade's own, not netted: netting pays back
+    pairs held at the same time, while this adds up what every trade put in
+    over the whole span. The rate a year is the return
+    on each dollar for each day it was out: the return over the sum of each
+    trade's capital times the days it is held, from the trade to its
+    settlement or, still open, to its payout, an hour at the least, times
+    365. A trade still in flight is left out.
+    """
+    where, params = in_sports(sports)
+    body, first = [], None
+    for market in markets:
+        rows = query_rows(conn, f"""
+            SELECT t.yes_cost + t.no_cost, t.profit + t.hedge_pnl, t.hedge_pnl, t.yes_held + t.no_held, t.signal_ts, t.pays_at,
+                   s.settled_at, COALESCE(s.yes_payout, 0) + COALESCE(s.no_payout, 0)
+            FROM trades t JOIN pairs p ON p.id = t.pair_id LEFT JOIN settlements s ON s.trade_id = t.id
+            WHERE t.mode = ? AND t.status != 'sent'{in_market(market)}{where}""", (mode,) + params)
+        settled, still_open, capital, returned, dollar_days = 0, 0, 0.0, 0.0, 0.0
+        for cap, expected, hedge, held, signal, pays, settled_at, payouts in rows:
+            first = min(first or signal, signal)
+            if settled_at is not None:
+                settled, returned, until = settled + 1, returned + payouts - cap + hedge, settled_at
+            elif held > 0:
+                still_open, returned, until = still_open + 1, returned + expected, pays
+            else:
+                returned, until = returned + hedge, signal
+            capital += cap
+            dollar_days += cap * held_days(signal, until)
+        ret = 100 * returned / capital if capital > 0 else None
+        annual = 100 * returned * 365 / dollar_days if dollar_days > 0 else None
+        body.append((market, f"{settled:,}", f"{still_open:,}", dollars(capital), dollars(returned), percent(ret), percent(annual)))
+    if first is None:
+        print(f"\n{mode} totals since the first trade: none")
+        return
+    print_table(f"{mode} totals since the first trade, on {first[:10]}, settled and open",
+                ("market", "settled", "open", "capital $", "return $", "return %", "annual %"), body)
 
 
 def print_paper_money(conn):
@@ -612,6 +611,8 @@ if __name__ == "__main__":
     print_gaps(conn, since, args.hours)
     for market in MARKET_CHOICES[args.market]:
         print_market(conn, since, args.hours, sports, market, MODES[args.mode], now)
+    for mode in MODES[args.mode]:
+        print_totals(conn, mode, MARKET_CHOICES[args.market], sports)
     if "paper" in MODES[args.mode]:
         print_paper_money(conn)
     if "live" in MODES[args.mode] and not args.no_live:
