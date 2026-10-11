@@ -514,10 +514,10 @@ settlement value when the result is `scalar`, as a drawn CS2 match paid
 market has resolved, which was 0.41 for the same match, the last fair
 price its rules pay on. Polymarket US costs a call per event, half a
 second apart (`RESULTS_SLEEP`), since its limit, which answered HTTP 429
-at about six calls a second on October 11, is shared with the live
-orders. Both clients carry the live trading calls: the account's balance,
-and an immediate or cancel limit order whose answer they turn into an
-`Answer`, the same for both venues. Polymarket US prices every order on the long
+at about six calls a second on October 11, is shared with the live orders.
+Both clients carry the live trading calls: the account's balance, and an
+immediate or cancel limit order whose answer they turn into an `Answer`,
+the same for both venues. Polymarket US prices every order on the long
 side, so a short side order at p is sent at 1 - p, and when its answer does
 not say how an order ended, the order itself is looked up, since a returned
 order id does not mean the order is done. Both venues trade in hundredths
@@ -1600,7 +1600,8 @@ python3 -m catalog.pipeline --sport nfl
 python3 -m engine.run --sport nfl
 ```
 
-`--sport ncaaf`, `--sport epl`, `--sport politics`, and the rest build or run one sport's markets, `--sport nfl,ncaaf,mlb` several
+`--sport ncaaf`, `--sport epl`, `--sport politics`, and the rest build or
+run one sport's markets, `--sport nfl,ncaaf,mlb` several
 from one pool of money, and `--sport all` every one, as the instance does
 with `--sport all --execute live --live-in-play --not-live none`.
 `--no-trade` scans without trading, `--no-scan` only records, and

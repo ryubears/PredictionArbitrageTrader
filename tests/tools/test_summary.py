@@ -355,7 +355,7 @@ def held_trade(conn, mode="live", pair_id=1, signal=BEFORE, held=(5, 5), cost=(2
 
 
 def test_netting_pairs_a_contracts_yes_with_its_no_on_the_same_venue():
-    assert summary.netted([
+    assert summary.paid_back([
         ("kalshi", "k", "yes", "yes", 20), ("polymarket_us", "p", "yes", "no", 20),         # k's yes and p's no.
         ("polymarket_us", "p", "yes", "yes", 3), ("kalshi", "k", "yes", "no", 2.5),         # p's yes and k's no, a later trade.
         # Through a contract paying on the bet's no: the bet's yes is q's no, and its no q's yes.

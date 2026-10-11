@@ -114,11 +114,11 @@ class Settler:
         paid = []
         for leg in held:
             yes_paid, settled_at = results[leg.key]
-            payout = leg.held * (yes_paid if leg.outcome == "yes" else 1 - yes_paid)
-            settlement.record(leg.side, written(yes_paid), payout, settled_at or now)
+            result, payout = written(yes_paid), leg.held * (yes_paid if leg.outcome == "yes" else 1 - yes_paid)
+            settlement.record(leg.side, result, payout, settled_at or now)
             if payout:
                 self.cash.apply(Ledger(settlement.settled_at, leg.venue, payout, "payout", t.id))
-            paid.append((leg, written(yes_paid), payout))
+            paid.append((leg, result, payout))
         database.insert_settlement(self.conn, settlement)
         if self.executor:
             self.executor.settled(t.id)
