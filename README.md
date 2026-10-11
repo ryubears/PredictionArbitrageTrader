@@ -1037,16 +1037,32 @@ open, which are stored only once they end, are left out, and so are those
 whose peak came while a leg's venue was in its weekly maintenance, which
 the scanner kept until 2026-10-08. The market then
 shows, for paper and then live, or one of them with `--mode paper` or
-`--mode live`, the trades by outcome, filled, partial, then failed, and by
-sport and kind in the window, the five holding the most capital, the legs
-settled in it by venue, and the open trades: in a few lines, how many, how
-many of them opened in the last hour, day, and week and the capital those
-still hold, the capital they all hold on each venue and the profit they are
-expected to return with its rate a year weighted by capital, and the first,
-average, and last dates they resolve, the first maybe past and waiting on a
-venue, the average weighted by capital; then a table of each open trade
+`--mode live`, the net of the window: what the trades opened in it locked
+in and made or lost flattening, the tables' net, with what the exposed
+contracts of the trades settled in it made or lost, their payouts less
+their costs and locked-in profit. A balanced trade realizes its profit to
+the cent, and until 2026-10-11 what the exposed ones made, -3.93$ on
+futures and 0.33$ in play over all live trades, showed only in the legs
+settled by venue. Then the trades by outcome, filled, partial, then
+failed, and by sport and kind in the window, the five holding the most
+capital, the legs settled in it by venue, and the open trades: in a few
+lines, how many, how many of them opened in the last hour, day, and week
+and the capital those still hold, the capital they all hold and what is
+still held of it on each venue, and the profit they are expected to return
+on that with its rate a year weighted by capital, and the first, average,
+and last dates they resolve, the first maybe past and waiting on a venue,
+the average weighted by capital; then a table of each open trade
 opened in the window, newest first, with what it holds, its capital,
-expected profit and rates, and when it pays. Live's trades end with its
+expected profit and rates, and when it pays. Both venues net a contract's
+yes and no into one position and pay a dollar a pair at once, so when a
+later live trade holds the other outcome of a contract an earlier open one
+holds, on the same venue, the smaller of the two is back in cash though
+both trades are still open. Live's capital still held leaves those pairs
+out, a dollar each: on 2026-10-11 the open live trades cost 3,601.57$, of
+which 443.51 pairs on Polymarket US and 29.59 on Kalshi were already paid
+back, against the venues' own 3,026.17$ cost of open positions, most of
+the rest being trades whose markets had already resolved. Paper's books do
+not net. Live's trades end with its
 real orders sent by venue and what came back, then its orders to open by
 venue, the side they bought, and how long the venue had sent nothing for
 the market when each went out (0-1, 1-5, 5-30, 30+ seconds), with how many
