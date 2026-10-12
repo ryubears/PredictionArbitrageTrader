@@ -71,6 +71,9 @@ CREATE TABLE IF NOT EXISTS nest_members (
     PRIMARY KEY (pair_id, venue, contract_id)
 );
 
+-- Loading the pairs and the contracts to record find a contract's nested pairs by the contract.
+CREATE INDEX IF NOT EXISTS idx_nest_members_contract ON nest_members (venue, contract_id);
+
 CREATE TABLE IF NOT EXISTS gaps (
     venue        TEXT NOT NULL,
     start_ts     TEXT NOT NULL,   -- When the connection was lost, ISO 8601 UTC.

@@ -168,13 +168,9 @@ def event_ids(conn, venue, contract_ids):
 
 # Every paired game with its kickoff, the latest start time any of its contracts gives, which is Polymarket US's since
 # Kalshi gives none.
-# The contracts of every current pair, as (venue, contract_id, pair_id): a pair's bets, and a nested pair's members.
-MEMBERS = """
-    SELECT venue, contract_id, pair_id FROM bets WHERE pair_id IS NOT NULL
-    UNION SELECT venue, contract_id, pair_id FROM nest_members"""
-GAMES = f"""
+GAMES = """
     SELECT p.sport, p.game_date, p.team_a, p.team_b, MAX(c.start_time) AS kickoff
-    FROM pairs p JOIN ({MEMBERS}) m ON m.pair_id = p.id JOIN contracts c ON c.venue = m.venue AND c.contract_id = m.contract_id
+    FROM pairs p JOIN bets b ON b.pair_id = p.id JOIN contracts c ON c.venue = b.venue AND c.contract_id = b.contract_id
     WHERE p.game_date IS NOT NULL GROUP BY 1, 2, 3, 4"""
 
 
@@ -196,14 +192,22 @@ def load_recording_targets(conn, sport, now, horizon, venues, game_started_after
     for venue in venues:
         rows = conn.execute(f"""
             WITH games AS ({GAMES})
-            SELECT DISTINCT c.contract_id FROM contracts c
-            JOIN ({MEMBERS}) m ON m.venue = c.venue AND m.contract_id = c.contract_id
-            JOIN pairs p ON p.id = m.pair_id
+            SELECT c.contract_id FROM contracts c
+            JOIN bets b ON b.venue = c.venue AND b.contract_id = c.contract_id
+            JOIN pairs p ON p.id = b.pair_id
+            LEFT JOIN games g ON g.sport = p.sport AND g.game_date = p.game_date AND g.team_a = p.team_a AND g.team_b = p.team_b
+            WHERE c.venue = ? AND c.sport = ?
+              AND (g.kickoff > ? OR (g.kickoff IS NULL AND (c.close_time IS NULL OR c.close_time > ?)))
+              AND (b.game_date IS NULL OR b.game_date <= ?)
+            UNION
+            SELECT c.contract_id FROM contracts c
+            JOIN nest_members n ON n.venue = c.venue AND n.contract_id = c.contract_id
+            JOIN pairs p ON p.id = n.pair_id
             LEFT JOIN games g ON g.sport = p.sport AND g.game_date = p.game_date AND g.team_a = p.team_a AND g.team_b = p.team_b
             WHERE c.venue = ? AND c.sport = ?
               AND (g.kickoff > ? OR (g.kickoff IS NULL AND (c.close_time IS NULL OR c.close_time > ?)))
               AND (p.game_date IS NULL OR p.game_date <= ?)
-        """, (venue, sport, game_started_after, now, horizon[:10]))
+        """, (venue, sport, game_started_after, now, horizon[:10]) * 2)
         targets[venue] = [r[0] for r in rows]
     return targets
 
@@ -304,20 +308,29 @@ def load_pairs(conn, sport):
     the higher's, one copy of a contract a side, shared by the nested pairs
     it is in.
     """
-    members, sided, paired = {}, {}, set()
+    def member(r):
+        m = dict(r)
+        rules = m.pop("rules")
+        m["rules_digest"] = hashlib.sha256(rules.encode()).hexdigest() if rules else None
+        return m
+    members, sided = {}, {}
     for r in conn.execute("""
-        SELECT b.*, c.event_id, c.start_time, c.close_time, c.rules, n.pair_id AS nested_id, n.side
-        FROM bets b JOIN contracts c USING (venue, contract_id) LEFT JOIN nest_members n USING (venue, contract_id)
-        WHERE c.sport = ? AND (b.pair_id IS NOT NULL OR n.pair_id IS NOT NULL)""", (sport,)):
-        member = dict(r)
-        rules, nested_id, side = member.pop("rules"), member.pop("nested_id"), member.pop("side")
-        member["rules_digest"] = hashlib.sha256(rules.encode()).hexdigest() if rules else None
-        key = (r["venue"], r["contract_id"])
-        if r["pair_id"] is not None and key not in paired:     # A row for each nested pair the contract is in too.
-            paired.add(key)
-            members.setdefault(r["pair_id"], []).append(member)
-        if nested_id is not None:
-            members.setdefault(nested_id, []).append(sided.setdefault(key + (side,), dict(member, side=side)))
+        SELECT b.*, c.event_id, c.start_time, c.close_time, c.rules FROM bets b JOIN contracts c USING (venue, contract_id)
+        WHERE c.sport = ? AND b.pair_id IS NOT NULL""", (sport,)):
+        members.setdefault(r["pair_id"], []).append(member(r))
+    # From the contracts of the sport, each found in nest_members by its index: on 2026-10-12 a join looking each bet up
+    # in nest_members without one read all 76,402 rows for every bet, and a restart took minutes to load the pairs.
+    for r in conn.execute("""
+        SELECT b.*, c.event_id, c.start_time, c.close_time, c.rules, n.pair_id AS nested_id, n.side AS supplies
+        FROM contracts c JOIN nest_members n ON n.venue = c.venue AND n.contract_id = c.contract_id
+        JOIN bets b ON b.venue = c.venue AND b.contract_id = c.contract_id
+        WHERE c.sport = ?""", (sport,)):
+        key = (r["venue"], r["contract_id"], r["supplies"])
+        if key not in sided:
+            m = member(r)
+            del m["nested_id"], m["supplies"]
+            sided[key] = dict(m, side=r["supplies"])
+        members.setdefault(r["nested_id"], []).append(sided[key])
     return {r["id"]: dict(r, members=members[r["id"]]) for r in conn.execute("SELECT * FROM pairs") if r["id"] in members}
 
 

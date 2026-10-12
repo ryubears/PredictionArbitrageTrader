@@ -1667,7 +1667,16 @@ dollar less what the two legs cost; when the number lands between the
 lines both legs pay, and the summary's net counts that second dollar a
 pair once the trade settles (`both_paid`). The catalog nested 23,178
 pairs that day, counting the lines one venue alone lists, which are
-recorded for them from that day's second build. Whether
+recorded for them from that day's second build. Its first deploy, at
+11:18 UTC, looked each bet up in `nest_members` without an index, reading
+all 76,402 rows for every bet, so the restart sat for minutes loading the
+pairs, and the instance went back to the build before at 11:24, trading
+again from 11:27. The members are now read from the sport's contracts
+through an index on `nest_members` (`idx_nest_members_contract`), and the
+contracts to record by the paired query as before with the nested one
+beside it: on a copy of that day's database the pairs loaded in 5.95
+seconds against 5.04 before nesting, and the contracts to record in 15.7
+against 13.9. Whether
 venues misprice one line against another often enough to trade is what
 the episodes will show: an edge needs one venue's lower line to cost
 less than the other's higher line pays, while the higher line should
