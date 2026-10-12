@@ -31,7 +31,8 @@ from db import migrations, schema
 from db.models import Alert, Bet, Gap, Ledger, Opportunity, Order, Settlement, Trade
 from pathlib import Path
 
-DB_PATH = DATA_DIR / "sportsarb.sqlite"     # Named for the project's first name, SportsArb, which the instance's database keeps.
+DB_PATH = DATA_DIR / "prediction_arbitrage_trader.sqlite"
+OLD_DB_PATH = DATA_DIR / "sportsarb.sqlite"     # DB_PATH until the project was renamed on 2026-10-12, see connect().
 
 # Model fields that are read from other tables or set by the database, so they are never written.
 NOT_STORED = {"id", "label", "starts_at"}
@@ -68,9 +69,13 @@ def update_sql(table, names):
 
 def connect(db_path=None):
     """
-    Open the database, creating the file and tables if needed. Uses DB_PATH unless a path is given.
+    Open the database, creating the file and tables if needed. Uses DB_PATH unless a path is given, but does not create
+    it while OLD_DB_PATH is still there, so a process or catalog refresh started on the new code before the database
+    was moved does not begin again on an empty one.
     """
     db_path = Path(db_path or DB_PATH)
+    if db_path == DB_PATH and not db_path.exists() and OLD_DB_PATH.exists():
+        raise FileNotFoundError(f"the database is still at {OLD_DB_PATH}: stop the process and move it to {DB_PATH}")
     db_path.parent.mkdir(parents=True, exist_ok=True)
     # A long busy timeout lets the recorder and the hourly catalog job share the file.
     conn = sqlite3.connect(db_path, timeout=30)
