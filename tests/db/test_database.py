@@ -17,6 +17,19 @@ def contract(venue, contract_id, **fields):
     return c
 
 
+def test_the_database_is_not_begun_again_while_it_is_still_under_its_old_name(tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "new.sqlite")
+    monkeypatch.setattr(database, "OLD_DB_PATH", tmp_path / "old.sqlite")
+    database.connect().close()                              # Neither there: a new database.
+    (tmp_path / "new.sqlite").rename(tmp_path / "old.sqlite")
+    with pytest.raises(FileNotFoundError, match="still at"):
+        database.connect()
+    assert not (tmp_path / "new.sqlite").exists()
+    database.connect(tmp_path / "other.sqlite").close()     # A path given is opened as asked.
+    (tmp_path / "old.sqlite").rename(tmp_path / "new.sqlite")
+    database.connect().close()
+
+
 def test_contracts_upsert_keeps_first_seen(tmp_path):
     conn = database.connect(tmp_path / "t.sqlite")
     database.upsert_contracts(conn, [contract("kalshi", "A")], "2026-01-01T00:00:00+00:00")

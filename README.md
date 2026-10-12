@@ -287,8 +287,8 @@ new pairs' contracts are added to the running feeds without reconnecting.
 
 ### Where things are stored
 
-One SQLite file, `data/sportsarb.sqlite`. Each table is written by one
-place (see the top of `db/database.py`):
+One SQLite file, `data/prediction_arbitrage_trader.sqlite`. Each table is
+written by one place (see the top of `db/database.py`):
 
 | table | written by |
 |---|---|
@@ -1219,11 +1219,11 @@ old host and on `external-api`, each with and without compression.
 The live process runs on a c7a.large in us-east-1, the region Polymarket
 US's exchange runs in, about 10 ms from Kalshi's API hosts in us-east-2. A
 signed round trip is about 35 ms to Kalshi and 30 ms to Polymarket US. A
-systemd service, `sportsarb-recorder`, starts `python3 -m engine.run
---sport all --execute live` from
-`~/SportsArb/src` on boot and restarts it on any exit, and the process
-starts a child for each venue's feed and each catalog refresh, which stop
-with it. The venue API keys live in `data/`, which is
+systemd service, `prediction-arbitrage-trader`, starts `python3 -m
+engine.run --sport all --execute live` from
+`~/PredictionArbitrageTrader/src` on boot and restarts it on any exit, and
+the process starts a child for each venue's feed and each catalog refresh,
+which stop with it. The venue API keys live in `data/`, which is
 gitignored, and are copied to the instance by `scp` only. Deploying is
 `git pull` on the instance, the tests, and a service restart only if they
 pass, which refreshes the catalog for some eight minutes and then
@@ -1231,8 +1231,8 @@ resubscribes. Each run logs the commit it runs and every setting when it
 starts, so the log says what produced its results. The instance was first
 placed in Mexico to reach polymarket.com, which was then dropped as a venue
 for legal reasons in favor of Polymarket US, and moved to us-east-1.
-The project was called SportsArb until 2026-10-12, and the instance keeps
-that name for its folder, its service, and its database file.
+The project was called SportsArb until 2026-10-12, when its folder, its
+service, `sportsarb-recorder`, and its database file were renamed with it.
 
 `commands.txt` holds the commands used to check the data, deploy, and
 operate the instance, with the instance's address, key, and ids written
