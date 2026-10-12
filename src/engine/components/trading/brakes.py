@@ -33,9 +33,7 @@ Live trading halts, with every order stopped, when:
   tells a human, see live.py. Nor is one it turned away because the market
   was not trading, paused, closed, or decided, or the exchange had
   stopped, which is closed: the venue works, and the market is left alone
-  until it trades again, see live.py. Until 2026-10-07 those were
-  refusals, so three paused markets in a row would have halted live
-  trading.
+  until it trades again, see live.py.
 
 Live trading halts, with flattening going on, when the live trades
 decided in the last config.LIVE_RESULT_HOURS lost more than
@@ -57,10 +55,7 @@ holds, on the same venue, the smaller of the two is back in cash though
 both trades still count what it cost until they settle, see
 database.netted(). A dollar a pair, not what the pairs cost, keeps the
 live money what it would be had the venues not netted, so what a trade
-locked in counts in its result alone. Until 2026-10-12 those pairs were
-counted twice, in the cash and at cost: on 2026-10-11 about 473$ of the
-3,601.57$ open live trades held, which made the halt on losses looser
-than meant.
+locked in counts in its result alone.
 """
 
 from common.paths import DATA_DIR, NAME

@@ -114,7 +114,7 @@ def test_both_legs_are_sent_as_real_orders_and_every_order_is_stored(tmp_path):
 
 
 def test_a_trade_opens_with_a_fraction_of_a_contract_down_to_a_tenth(tmp_path):
-    # Half of the 0.74 shown is 0.37, which live opens in hundredths, on futures and games alike, from 2026-10-07.
+    # Half of the 0.74 shown is 0.37, which live opens in hundredths, on futures and games alike.
     venues = Venues(polymarket_us=[fills()], kalshi=[fills()])
     conn, cash, ex = executor(tmp_path, venues, books(size=0.74))
     assert trade(ex) == [True]
@@ -325,8 +325,8 @@ def test_a_trade_still_exposed_past_its_payout_time_is_flattened_again(tmp_path)
     conn, cash, ex = executor(tmp_path, venues, latest)
     trade(ex)                                                           # The 6 yes over found no taker, though the book showed one.
     assert list(ex.exposed) == [1]
-    # The payout time is kickoff plus the game and the venues settling, an estimate. On 2026-10-09 live trade 4135, a Dota 2
-    # map, was let go at its own with 25 contracts on one leg, while its market went on trading.
+    # The payout time is kickoff plus the game and the venues settling, an estimate, which a game can outlast with its
+    # market trading.
     changed(latest, LATE)
     at(ex, LATE)
     asyncio.run(ex.retry(LATE))
@@ -538,7 +538,7 @@ def test_a_sale_that_sold_nothing_is_tried_again_only_a_minute_later(tmp_path):
     trade(ex)                                                           # The 6 yes over found no taker, though the book showed one.
     assert len(venues.orders) == 3 and list(ex.exposed) == [1]
     for second in range(1, 60):
-        asyncio.run(ex.retry(f"2026-09-20T17:30:{second:02d}+00:00"))    # On 2026-10-01 such a sale went out every second for 16 hours.
+        asyncio.run(ex.retry(f"2026-09-20T17:30:{second:02d}+00:00"))    # Sold nothing, so not tried again within the minute.
     assert len(venues.orders) == 3
     at(ex, "2026-09-20T17:31:00+00:00")
     asyncio.run(ex.retry(ex.clock()))                                   # Sold nothing again, so a minute more.
@@ -557,8 +557,7 @@ def test_a_retry_checks_the_results_only_when_it_sold_something(tmp_path, monkey
     monkeypatch.setattr(database, "load_trade_cash", lambda *args: checks.append(args) or [])
     for second in range(1, 60):
         assert asyncio.run(ex.retry(f"2026-09-20T17:30:{second:02d}+00:00")) is False
-    # The retry runs every tick while a trade is exposed. A check each time, over 116,000 orders on 2026-10-03, held up
-    # the orders queued behind it some 150 ms.
+    # The retry runs every tick while a trade is exposed, and a check each time would hold up the orders queued behind it.
     assert checks == []
     at(ex, "2026-09-20T17:31:00+00:00")
     assert asyncio.run(ex.retry(ex.clock())) is True and len(checks) == 1 and ex.exposed == {}
@@ -572,7 +571,7 @@ def test_a_fraction_sold_back_on_a_later_try_is_recorded(tmp_path):
     assert list(ex.exposed) == [1] and stored(conn, "trades")[0]["yes_held"] == 10
     at(ex, "2026-09-20T17:31:00+00:00")                                  # A minute on, when a sale that sold nothing is tried again.
     asyncio.run(ex.retry(ex.clock()))
-    # On 2026-10-01 a sale of 0.42 read as one that sold nothing, "sold back 0...", and went unrecorded.
+    # A sale of 0.42 is not read as one that sold nothing, "sold back 0...".
     t = stored(conn, "trades")[0]
     assert (t["yes_held"], t["no_held"]) == (9.58, 9.58) and ex.exposed == {}
     assert t["hedge"].endswith("then sold back 0.42 of 0.42 on polymarket_us at 17:31:00")
@@ -597,7 +596,7 @@ def test_a_sale_turned_away_for_lack_of_cash_waits_until_the_cash_grows_and_halt
         cash.read["polymarket_us"] += 1.0                               # A payout, say: tried again, once.
         asyncio.run(ex.retry(NOW))
         asyncio.run(ex.retry(NOW))
-    # Turned away twice more, then sold. Three turned away in a row halted live trading as refusals on 2026-10-01.
+    # Turned away twice more, then sold. Three turned away in a row are no refusals, so live trading goes on.
     assert len(venues.orders) == 6 and ex.exposed == {} and stored(conn, "trades")[0]["yes_held"] == 4
     assert ex.halted is None
 
@@ -866,7 +865,7 @@ def test_live_trades_an_edge_only_once_it_has_lasted_and_asks_to_be_offered_it_a
     since[GAME["id"]] = "2026-09-22T17:59:59.900000+00:00"             # A tenth of a second.
     assert signal(ex) and len(venues.orders) == 2 and asked == [(GAME["id"], 0.06)]
     future = {**FUTURE, "id": 2}
-    since[future["id"]] = UNDER_WAY                                     # A future's edge, just begun, is held too, from 2026-10-07.
+    since[future["id"]] = UNDER_WAY                                     # A future's edge, just begun, is held too.
     assert not signal(ex, future, SURE) and len(venues.orders) == 2 and asked[-1] == (future["id"], 0.1)
     since[future["id"]] = "2026-09-22T17:59:59.900000+00:00"
     assert signal(ex, future, SURE) and len(venues.orders) == 4
@@ -905,7 +904,7 @@ def test_live_waits_for_polymarket_us_to_catch_up_only_with_the_kalshi_change_fr
     latest[("polymarket_us", "pm")] = Book(pm.venue, pm.contract_id, "2026-09-22T17:59:59.950000+00:00", pm.bids, pm.asks)
     assert signal(ex) and len(venues.orders) == 2
     # The edge began a second ago, with Kalshi's change of then. Its change a tenth of a second ago left the edge where live
-    # takes it, so it does not start the wait again: before 2026-10-07 it did.
+    # takes it, so it does not start the wait again.
     latest[("polymarket_us", "pm")] = Book(pm.venue, pm.contract_id, "2026-09-22T17:59:50+00:00", pm.bids, pm.asks)
     opened[("kalshi", "k")] = epoch("2026-09-22T17:59:59+00:00")
     assert signal(ex, {**GAME, "id": 2}) and len(venues.orders) == 4 and asked == [(GAME["id"], 0.2)]

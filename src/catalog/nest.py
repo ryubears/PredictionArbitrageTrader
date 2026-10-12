@@ -37,11 +37,10 @@ pair, so an edge across a wide gap is rare. Only lines ending in a half
 are nested, so that no number lands on one and no venue's rule for a push
 comes into it, and only kinds whose statement is a number going over the
 line, see nests_kind(). A match the venues date a day apart is one match,
-as when pairing, see match.near_dates(). From 2026-10-12, at the user's
-asking: that day the lines both venues list made 11,325 nested pairs,
-and with the lines one venue alone lists 23,178, 3,003 of them futures,
-for which some 4,000 more Kalshi contracts and 3,000 more Polymarket US
-ones are recorded.
+as when pairing, see match.near_dates(). The lines both venues list make
+some 11,000 nested pairs, and with the lines one venue alone lists some
+23,000, about 3,000 of them futures, for which some 4,000 more Kalshi
+contracts and 3,000 more Polymarket US ones are recorded.
 """
 
 from collections import defaultdict

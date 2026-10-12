@@ -46,7 +46,7 @@ def exact(contracts):
 def size(contracts):
     """
     A number of contracts as an order's size, to the hundredth, and a whole
-    number when it is one, as orders of whole contracts were always sent.
+    number when it is one.
     """
     contracts = exact(contracts)
     return int(contracts) if contracts == int(contracts) else contracts

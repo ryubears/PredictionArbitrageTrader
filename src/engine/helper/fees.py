@@ -11,18 +11,16 @@ page says for an account kept to the hundredth of a cent, as ours is:
     taker fee = round up to the hundredth of a cent of multiplier * 0.07 * contracts * price * (1 - price).
     maker fee = the same with 0.0175, only on series with fee_type quadratic_with_maker_fees.
     The multiplier is stored per contract in fee_info, 1 for sports.
-    Kalshi carries what it rounds across an order's fills, so an order
-    split over several fills pays what one fill would. Until 2026-10-07
-    this rounded up to the cent, as Kalshi once did, but every Kalshi order
-    since 2026-09-30, when live trading began, paid to the hundredth of a
-    cent: one contract at 19 cents 0.0108$, not 0.02$, and 0.01 of one 0.0002$.
+    Kalshi carries what it rounds across an order's fills, so an order split
+    over several fills pays what one fill would: one contract at 19 cents
+    pays 0.0108$, not 0.02$, and 0.01 of one 0.0002$.
 
 Polymarket US, docs.polymarket.us, fees page:
     taker fee = coefficient * contracts * price * (1 - price), rounded half to even to the cent.
     The coefficient is stored per contract in fee_info as feeCoefficient, 0.0695 for sports.
-    Of the 1,134 orders live had filled by 2026-10-07 this matched 980 to
-    the cent, and 1,071 rounded fill by fill, as an order filling against
-    several sellers is: the rest were a cent apart either way.
+    Of 1,134 live orders this matched 980 to the cent, and 1,071 rounded
+    fill by fill, as an order filling against several sellers is: the rest
+    were a cent apart either way.
 """
 
 import math

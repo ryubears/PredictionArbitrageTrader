@@ -23,27 +23,24 @@ venues, trading/ makes the trades, and money/ keeps the cash.
 - The attestation watch, from trading/notify.py, which emails a human
   before the Kalshi key's location attestation lapses.
 - A Desk for each mode the run trades in, with its own money, executor, and
-  settler, and its trades stored with its mode, so paper and live never
-  mix. They trade apart: the paper desk the bets on one event, a game, a
-  match, or a race, before it and while it is played, that pay within
+  settler, and its trades stored with its mode, so paper and live never mix.
+  They trade apart: the paper desk the bets on one event, a game, a match,
+  or a race, before it and while it is played, that pay within
   MAX_PAYOUT_HOURS, and the live desk the futures, which pay
-  MIN_PAYOUT_HOURS or more out, bar the sports given to --not-live.
-  On the same signal live's real orders took the contracts paper's
-  simulated ones looked for: from 2026-10-04, when live began asking for
-  all it saw, paper twins of live trades failed 10 times in 13. Each desk
-  still flattens and settles every trade it holds. With --live-in-play
-  live also trades the games, matches, and races under way that
-  pay within MAX_PAYOUT_HOURS, of every sport, Polymarket US's order
+  MIN_PAYOUT_HOURS or more out, bar the sports given to --not-live. On the
+  same signal live's real orders take the contracts paper's simulated ones
+  look for. Each desk still flattens and settles every trade it holds. With
+  --live-in-play live also trades the games, matches, and races under way
+  that pay within MAX_PAYOUT_HOURS, of every sport, Polymarket US's order
   first, an edge of LIVE_IN_PLAY_MIN_EDGE or more, at most
   LIVE_IN_PLAY_CONTRACTS a trade. Live takes a future's edge, as a game's,
   once it has lasted LIVE_HOLD_SECONDS, the scanner offering a held edge
-  again once it has lasted, through Scanner.edge_since() and recheck(),
-  and counts a leg's wait for its book to catch up from the other's change
-  as the edge began, through Scanner.edge_books(). A future's edge lasting
-  past a trade that matched is offered again, through
-  Scanner.offer_again(). When paper runs too it trades the same games,
-  given back what our live orders took from the books, see
-  trading/footprints.py.
+  again once it has lasted, through Scanner.edge_since() and recheck(), and
+  counts a leg's wait for its book to catch up from the other's change as
+  the edge began, through Scanner.edge_books(). A future's edge lasting past
+  a trade that matched is offered again, through Scanner.offer_again(). When
+  paper runs too it trades the same games, given back what our live orders
+  took from the books, see trading/footprints.py.
   - Paper: trading/paper.py fills against the same books with the paper
     money of money/paper.py.
   - Live: trading/live.py sends real orders with the money the venues
@@ -61,7 +58,7 @@ second process would spend the same dollars. The catalog holds both the
 bets on one event and the futures. A sport given to --not-live has its
 futures followed but not traded live, to see how they do before real
 money goes on them; by default, or with --not-live none, live trades every
-sport's. Bitcoin was left out of the catalog from 2026-10-10.
+sport's.
 
 Run with:
     python3 -m engine.run --sport nfl

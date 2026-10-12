@@ -209,7 +209,7 @@ def piece(kind, shares, long_price, fee):
 
 
 def test_an_order_filled_in_pieces_of_a_contract_counts_them_together(monkeypatch):
-    # A live answer from 2026-09-30: no on Michigan State 4.5 wins, 1 contract, filled as 0.1, 0.89, and 0.01 of one at a yes price
+    # A live answer: no on Michigan State 4.5 wins, 1 contract, filled as 0.1, 0.89, and 0.01 of one at a yes price
     # of 0.58. Each piece cut to a whole contract on its own read as none filled, with a fee for it.
     executions = [piece("NEW", "0.0000", "0.0000", "0.0000"), piece("PARTIAL_FILL", "0.1000", "0.5800", "0.0000"),
                   piece("PARTIAL_FILL", "0.8900", "0.5800", "0.0200"), piece("FILL", "0.0100", "0.5800", "0.0000")]

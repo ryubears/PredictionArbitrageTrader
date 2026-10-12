@@ -1,15 +1,13 @@
 """
 Print how the live trades of the in-play test did beside their paper twins.
 
-The in-play test ran from 2026-10-04 17:49 to 2026-10-05 01:27 UTC. Live
-traded 200 times on the games, matches, races, and windows under way, at
-no more than 5 contracts, and paper sent a twin of each: the same signal,
-the same legs, the same limits, the same size, giving back what our live
-orders took from the books, see trading/footprints.py. The twins table
-pairs them. Where the two did alike, paper's fills in play are ones live
-gets; where live did worse, paper is optimistic there. Since then live
-trades games under way with engine.run --live-in-play, by the rules in
-trading/live.py, and nothing adds to the table.
+In the in-play test live traded 200 times on the games, matches, races, and
+windows under way, at no more than 5 contracts, and paper sent a twin of
+each: the same signal, the same legs, the same limits, the same size,
+giving back what our live orders took from the books, see
+trading/footprints.py. The twins table pairs them, and nothing else adds to
+it. Where the two did alike, paper's fills in play are ones live gets;
+where live did worse, paper is optimistic there.
 
 The trades with a leg on each venue take turns sending both orders at
 once and Polymarket US's first, Kalshi's only once that has answered, so
@@ -52,7 +50,7 @@ def load_pairs(conn):
     """
     Each live trade of the test, oldest first, as (label, live, paper, sequence), each trade a dict of COLUMNS with
     'settled', its result once both legs have paid out, paper None when it had no twin, and sequence as the twins
-    table says, null in a database from before it did.
+    table says, null on older rows.
     """
     twins = table_columns(conn, "twins")
     if not twins:

@@ -19,8 +19,8 @@ def halt_file(tmp_path, monkeypatch):
 @pytest.fixture(autouse=True)
 def half_share(request, monkeypatch):
     """
-    The trading scenarios were written when a trade asked for half of what the books showed, and their numbers keep
-    that share, so they still show the share at work. A test marked full_share runs with the configured one.
+    The trading scenarios ask for half of what the books show, so their numbers show the share at work. A test marked
+    full_share runs with the configured one.
     """
     if "full_share" not in request.keywords:
         monkeypatch.setattr(config, "FILL_SHARE", 0.5)

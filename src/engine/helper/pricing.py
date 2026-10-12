@@ -284,23 +284,21 @@ def supplying(members, side):
 
 def best_trade(members, books, fee_infos, one_venue=False):
     """
-    The cheapest yes leg and the cheapest no leg across a pair's members,
-    on two different venues, priced together. Both legs are on one venue
-    only given one_venue, as on a future, and then only on two contracts
-    with the same rules, see same_rules(). Otherwise: buying both sides of
-    one book is not a trade, a crossed book would look like free money,
-    and two contracts on one venue, such as a game's two teams on Kalshi,
-    are priced by the same traders, so a gap between them is one that moved
-    before the other and is gone before both orders land. In the in-play
-    test of 2026-10-04 52 trades with both legs on Kalshi matched 5 of the
-    247 contracts they asked for, live and paper alike. Polymarket US's
-    two listings of a season's win total are another matter: from
-    2026-09-30 to 10-05 live traded 255 of them, locking in 103$ on 978$
-    of capital, until both legs were kept off one venue that day, which
-    held for every pair to 2026-10-06. A nested pair's members hold only
-    their own side, see supplying(), and its legs are always on two
-    venues, see catalog/nest.py. Returns a Priced, or None when no two
-    members that may pair quote a side each.
+    The cheapest yes leg and the cheapest no leg across a pair's members, on
+    two different venues, priced together. Both legs are on one venue only
+    given one_venue, as on a future, and then only on two contracts with the
+    same rules, see same_rules(). Otherwise: buying both sides of one book
+    is not a trade, a crossed book would look like free money, and two
+    contracts on one venue, such as a game's two teams on Kalshi, are priced
+    by the same traders, so a gap between them is one that moved before the
+    other and is gone before both orders land: in the in-play test 52 trades
+    with both legs on Kalshi matched 5 of the 247 contracts they asked for,
+    live and paper alike. Polymarket US's two listings of a season's win
+    total are another matter: live traded 255 of them, locking in 103$ on
+    978$ of capital. A nested pair's members hold only their own side, see
+    supplying(), and its legs are always on two venues, see catalog/nest.py.
+    Returns a Priced, or None when no two members that may pair quote a side
+    each.
     """
     one_venue = one_venue and not any("side" in m for m in members)
     yeses, noes = supplying(members, "yes"), supplying(members, "no")
@@ -359,8 +357,7 @@ def polymarket_us_just_changed(yes, no, books, now):
     Whether the pricing at now came with the Polymarket US leg's own book
     change, not Kalshi's, another member's, a recheck, or the tick: its book
     reached us at now. True with no leg there. The scanner keeps it with
-    each episode, see Opportunity.pm_changed. From 2026-10-05 to 10-06 live
-    traded a game under way only at such a moment.
+    each episode, see Opportunity.pm_changed.
     """
     for member in (yes, no):
         if member["venue"] == "polymarket_us":

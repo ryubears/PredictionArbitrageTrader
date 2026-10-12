@@ -2,12 +2,11 @@
 Repair the live trades recorded under an older reading of Polymarket US fills.
 
 Polymarket US fills an order in pieces as small as a hundredth of a
-contract, 0.1 then 0.89 then 0.01 for one. At first each piece was cut to
-whole contracts on its own, so an order that filled in full was stored as
-filled short or not at all, and its trade was flattened against what it
-did not hold: on 2026-09-30, 18 of the first 32 orders there were misread.
-Then fills were added up but still cut to whole contracts, so 6.42 was
-stored as 6. Now they are counted to the hundredth, see orders.exact().
+contract, 0.1 then 0.89 then 0.01 for one. An older reading cut each
+piece, or their sum, to whole contracts, so an order that filled in full
+was stored as filled short or not at all, and its trade was flattened
+against what it did not hold. Fills are counted to the hundredth now,
+see orders.exact().
 
 This reads every stored Polymarket US answer again with
 polymarket_us.read_answer(), corrects each order read differently, and
@@ -21,9 +20,9 @@ trade on its bet, for a human to settle with the venue. Last it reads each
 venue's positions and compares them with what the live trades then hold,
 contract by contract.
 
-A trade whose record fell behind its orders for another reason, as trade
-48 did when a sale of 0.42 of a contract went unrecorded on 2026-10-01,
-is worked out again from its orders when named with --trade.
+A trade whose record fell behind its orders for another reason, such as
+a sale that went unrecorded, is worked out again from its orders when
+named with --trade.
 
 Stop the recorder first, so no order is in flight and the executor reads
 the repaired trades when it starts. Without --apply it only says what it

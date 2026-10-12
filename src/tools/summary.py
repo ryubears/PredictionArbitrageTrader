@@ -205,8 +205,7 @@ def seconds(value):
 def in_market(market):
     """
     A SQL condition keeping one market's pairs: the futures, which have no game, or the games, matches, and races,
-    which live trades once under way, and Bitcoin's 15 minute windows until 2026-10-10. Until 2026-10-05 paper traded
-    them before they started too, and its trades then count with the in-play ones.
+    which live trades once under way.
     """
     return " AND p.game_date IS NULL" if market == "futures" else " AND p.game_date IS NOT NULL"
 
@@ -221,21 +220,12 @@ def opportunity_rules(market):
     config.MAX_PAYOUT_HOURS, on the levels at config.LIVE_IN_PLAY_MIN_EDGE
     or more, of which no return a year is asked, whose edge stayed at
     config.MIN_EDGE or more for config.LIVE_HOLD_SECONDS, as live waits for
-    it to, see LiveExecutor.hold(). The scanner counts a game's moments
-    only from then, so the stretch condition leaves out only the episodes
-    of before 2026-10-06, kept by the rules of then. Until 2026-10-07 live
-    waited half a second, and the scanner counted a game's moments only
-    from half a second, so those days show fewer. A future's moments it
-    counts only once the edge has lasted config.LIVE_HOLD_SECONDS at the
-    rate a year from 2026-10-07, and those of the episodes before, counted
-    at once, stay as they were kept. Lasting does not make an edge real:
-    two episodes of one Bitcoin window on 2026-10-05 showed 5,304$ to be
-    locked in at 18.7 and 51.8 cents for one and two minutes, unlikely when
-    both venues settle it on the same index, likely a book left standing on
-    a market no longer trading. When that book is Polymarket US's, live,
-    sending its order first, loses only an order that fills nothing. Which
-    levels count, and at which moment, is the scanner's, see
-    Opportunity.take_size.
+    it to, see LiveExecutor.hold(). The scanner counts a moment only once
+    the edge has lasted that long. Lasting does not make an edge real: a
+    book left standing on a market no longer trading can show one for
+    minutes. When that book is Polymarket US's, live, sending its order
+    first, loses only an order that fills nothing. Which levels count, and
+    at which moment, is the scanner's, see Opportunity.take_size.
     """
     if market == "futures":
         return ("live = 0 AND days_held * 24 >= ? AND annual_pct >= ?", (config.MIN_PAYOUT_HOURS, config.MIN_ANNUAL_PCT),
@@ -251,25 +241,19 @@ def print_market_opportunities(conn, since, hours, sports, market):
     The episodes of one market within live's rules in the window: one order
     could have had config.LIVE_MIN_CONTRACTS or more on the levels at live's
     least edge or more, see opportunity_rules(). An edge on less, a sliver
-    of a level, is one no trade could take. That is a tenth of a contract
-    over the whole window, though live opened whole contracts until
-    2026-10-07, so days before then show episodes it could not take. Live
-    takes an edge in one order, and its own fill empties the levels it
-    takes, so what stayed fillable through the stretch at config.MIN_EDGE,
-    which these were counted by until 2026-10-05, left out the very episodes
-    it traded. Episodes from before the scanner kept what one order could
-    have had have none and are left out, as are ones still open, which are
-    stored only once they end. On a database the live process has not yet
-    brought up to it, the market says so. Capital is what buying those
-    contracts would have cost with fees, and profit what they lock in. The
-    annual rates weight each episode by its capital, over the days until it
-    pays. How long the edge stayed at config.MIN_EDGE or more is the longest
-    unbroken stretch of each episode, in seconds to the thousandth. An
-    episode whose peak came while a leg's venue was in its weekly
-    maintenance, see common/venues.py, is left out, as no order could trade
-    it: the scanner stopped keeping those on 2026-10-08, after Kalshi's
-    books froze that morning while a tennis match moved on Polymarket US,
-    and 70 in-play episodes showed 7,630$ to be locked in.
+    of a level, is one no trade could take. Live takes an edge in one order,
+    and its own fill empties the levels it takes, so what stayed fillable
+    through the stretch at config.MIN_EDGE would leave out the very episodes
+    it trades. Older episodes, which lack what one order could have had, are
+    left out, as are ones still open, which are stored only once they end.
+    On a database the live process has not yet brought up to it, the market
+    says so. Capital is what buying those contracts would have cost with
+    fees, and profit what they lock in. The annual rates weight each episode
+    by its capital, over the days until it pays. How long the edge stayed at
+    config.MIN_EDGE or more is the longest unbroken stretch of each episode,
+    in seconds to the thousandth. An episode whose peak came while a leg's
+    venue was in its weekly maintenance, see common/venues.py, is left out,
+    as no order could trade it.
     """
     cents = f"{100 * config.MIN_EDGE:.0f}c"
     where, params = in_sports(sports)
@@ -432,11 +416,8 @@ def exposure_settled(conn, since, mode, where, params):
     less what they cost, and the costs of what it holds leave out what
     flattening sold, whose result is its hedge, so what it realized beyond
     the profit is what its unmatched contracts paid less what they cost.
-    A balanced trade realizes its profit to the cent, as all 1,891 balanced
-    live trades settled by 2026-10-11 did, while the exposed ones had made
-    -3.93$ on futures and 0.33$ in play, which until then showed only in
-    the legs settled by venue, a table dropped on 2026-10-12. A leg that
-    held nothing has no payout and cost nothing.
+    A balanced trade realizes its profit to the cent. A leg that held
+    nothing has no payout and cost nothing.
     """
     return beyond_profit(conn, since, mode, "t.yes_held != t.no_held", where, params)
 
@@ -461,10 +442,7 @@ def print_market_trades(conn, since, hours, mode, market, sports, now):
     tables' net, with what exposed contracts made or lost at settlement in
     it, see exposure_settled(), so each trade counts its profit when it
     opens and its exposure when it settles, and with a nested trade's
-    second dollar a pair when both its legs paid, see both_paid(). Until
-    2026-10-12 live's orders followed, by venue and by how long the book
-    had sent nothing, and the legs settled in the window by venue came
-    before the open trades.
+    second dollar a pair when both its legs paid, see both_paid().
     """
     where, params = in_sports(sports)
     where = in_market(market) + where

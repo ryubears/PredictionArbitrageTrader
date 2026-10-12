@@ -7,8 +7,8 @@ when its money comes back, how long after kickoff it may still be under
 way, and whether it has started, after which its pairs are not traded and
 their books go stale if they stop changing. How long a game is expected
 to last depends on the sport, see config.GAME_HOURS: three in four of the
-sport's past games had ended by then. Both venues settled the first live
-game, Atlanta at Green Bay, within half an hour of its final whistle.
+sport's past games had ended by then. Both venues settle a game within
+half an hour of its final whistle, see config.SETTLE_HOURS.
 """
 
 from common.timeutil import days_between, shift
@@ -74,10 +74,9 @@ def past_close(game_date, member, now):
     """
     Whether a future's member is past its close time at now, so its market
     has stopped trading or its bet is expected to be decided, and is not
-    traded, from 2026-10-07. A game's member never is: Kalshi gives a game's
-    contract the time Kalshi expects it to end, which many games outlast,
-    and a game's markets say themselves when they close, see
-    market/record.py.
+    traded. A game's member never is: Kalshi gives a game's contract the
+    time Kalshi expects it to end, which many games outlast, and a game's
+    markets say themselves when they close, see market/record.py.
     """
     close = member.get("close_time")
     return game_date is None and bool(close) and close <= now

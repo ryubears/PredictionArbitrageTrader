@@ -29,8 +29,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from db.models import Contract
 
-# The hosts Kalshi dedicates to API traders, in place of the legacy api.elections.kalshi.com. A signed call there took
-# 17 ms against 27 on the legacy host, measured from the instance on 2026-09-29, and the feed was as fast.
+# The hosts Kalshi dedicates to API traders, in place of the legacy api.elections.kalshi.com. A signed call there takes
+# 17 ms against 27 on the legacy host, measured from the instance, and the feed is as fast.
 BASE = "https://external-api.kalshi.com/trade-api/v2"
 BASE_PATH = "/trade-api/v2"     # BASE's path, which a signed request's signature covers.
 SLEEP = 0.12   # Seconds between paged calls, to stay under the public rate limit.
@@ -48,8 +48,8 @@ SHORT_SHARD = "insufficient_shard_balance"
 # and waits for cash. A buy turned away for it is refused, since trades are sized by the cash.
 NO_FUNDS = "insufficient_balance"
 # Words in the error of an order turned away because its market or the exchange is not trading, which counts as closed
-# rather than refused: MARKET_NOT_ACTIVE, as a paused CS2 match answered on 2026-10-07, and trading_is_paused, as every order
-# in the Thursday maintenance did on 2026-10-01, and a closed or inactive market.
+# rather than refused: MARKET_NOT_ACTIVE, as a paused match answers, and trading_is_paused, as every order in the Thursday
+# maintenance gets, and a closed or inactive market.
 NOT_TRADING = ("not_active", "trading_is_paused", "closed", "inactive")
 LIFECYCLE = "market_lifecycle_v2"   # The channel saying when any market opens, pauses, closes, or is decided. It takes no tickers.
 # Why a market with each status the markets call gives is not trading, None when it trades. Any other status is a market
@@ -227,8 +227,8 @@ def yes_paid(market):
     What a yes contract of a finalized market, as the markets call gives it,
     paid, from 0 to 1: a dollar for a result of 'yes', nothing for 'no', and
     for 'scalar' its settlement value, part of a dollar, as a drawn CS2
-    match paid 0.60 on 2026-10-09. None for a market not finalized, or with
-    no result or one not read here.
+    match pays 0.60. None for a market not finalized, or with no result or
+    one not read here.
     """
     if market.get("status") != "finalized":
         return None
@@ -515,9 +515,8 @@ def order_body(ticker, action, outcome, quantity, price, client_id):
     side price p is sent as 1 - p. A sale is not reduce only. Kalshi keeps
     one position per market, so where one trade's Yes nets against more No
     held by others, selling it is buying No, which reduce only would cancel
-    unfilled every time: on 2026-10-01 that sent one sale 57,000 times in 16
-    hours. An order that would trade against one of our own is cancelled
-    rather than filled.
+    unfilled every time, the sale sent again and again. An order that would
+    trade against one of our own is cancelled rather than filled.
     """
     yes_price = price if outcome == "yes" else 1 - price
     body = {"ticker": ticker, "client_order_id": client_id, "side": BOOK_SIDES[(action, outcome)], "count": str(orders.size(quantity)),

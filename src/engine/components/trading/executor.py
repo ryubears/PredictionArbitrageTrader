@@ -10,32 +10,28 @@ back is the one thing that differs: paper.py fills it against the book the
 venue had when a live order would have reached it, live.py sends it to the
 venue. Everything else is here.
 
-An edge is taken only while each leg's book is current. Polymarket US
-books reach us some 85 ms after the venue changes them, Kalshi's in 12, so
-a price that just moved on one venue can sit next to the other's old one,
-an edge that is gone by the time an order arrives. A leg on a venue in
+An edge is taken only while each leg's book is current. Polymarket US books
+reach us some 85 ms after the venue changes them, Kalshi's in 12, so a
+price that just moved on one venue can sit next to the other's old one, an
+edge that is gone by the time an order arrives. A leg on a venue in
 config.CONFIRM_SECONDS must have a book newer, by the venues' own clocks,
 than the other leg's last change, or wait until that change is old enough
 that any reaction to it would have reached us. Live counts from the other
-leg's change as of when the edge reached its least edge, from 2026-10-07,
-so a change since that leaves the edge there does not start the wait
-again, see opened(). The scanner offers the edge again at the next
-change, or as soon as the wait ends, through recheck, so one that is real
-is taken then. Once it is taken, both legs' orders go out at once, on a
-game not yet started, on a future on paper, and with both legs on one
-venue, see pricing.best_trade(). On a game under way, and on live's
-futures, see LiveExecutor.lead(), Polymarket US's goes first, and Kalshi's
-only once it has answered, for no more than it filled, see fill_legs().
-Faster traders often take the Polymarket US quote before our order lands,
-while Kalshi's fills, and a leg that misses first leaves nothing to sell
-back. In the in-play test of 2026-10-04 live trades sent that way made
-3.84$ on 69 trades, and those sending both at once lost 3.84$ on 78: they
-matched about as many contracts, but 52 of them were left on one leg to
-sell back, against 12. From 2026-10-12 live's Kalshi order on a game
-under way may give up part of the edge left once Polymarket US has
-filled, as config.LIVE_IN_PLAY_ALLOWANCE says, see follow_limit(): Kalshi's
-price had often moved by the time its order came, and selling Polymarket
-US's contracts back cost more than the edge the room gives up.
+leg's change as of when the edge reached its least edge, so a change since
+that leaves the edge there does not start the wait again, see opened(). The
+scanner offers the edge again at the next change, or as soon as the wait
+ends, through recheck, so one that is real is taken then. Once it is taken,
+both legs' orders go out at once, on a game not yet started, on a future on
+paper, and with both legs on one venue, see pricing.best_trade(). On a game
+under way, and on live's futures, see LiveExecutor.lead(), Polymarket US's
+goes first, and Kalshi's only once it has answered, for no more than it
+filled, see fill_legs(). Faster traders often take the Polymarket US quote
+before our order lands, while Kalshi's fills, and a leg that misses first
+leaves nothing to sell back. Live's Kalshi order on a game under way may
+give up part of the edge left once Polymarket US has filled, as
+config.LIVE_IN_PLAY_ALLOWANCE says, see follow_limit(): Kalshi's price has
+often moved by the time its order comes, and selling Polymarket US's
+contracts back costs more than the edge the room gives up.
 
 When the two legs fill unevenly the executor goes flat at once by selling
 the excess back on its own venue, and records the result with fees. A
@@ -46,20 +42,17 @@ cost: below that it would give away most of what was paid, and the
 contracts are kept, as a bet that may still pay out.
 What it cannot sell stays on a list and is tried again on every tick,
 against the books as they are then, until it is flat or the settler says
-its contracts have resolved, however long the game outlasts the payout
-time we expected: a market that has stopped trading sells nothing, see
-flatten(). Until 2026-10-10 a trade was given up at that time: live trade
-4135, a Dota 2 map, sold back 25 of the 50 contracts it held on one leg,
-and the other 25 were never offered again while its market went on
-trading. Only one config.FLATTEN_PAST_PAYOUT_HOURS past it is let go. A
+its contracts have resolved, however long the game outlasts the payout time
+we expected: a market that has stopped trading sells nothing, see
+flatten(). Only one config.FLATTEN_PAST_PAYOUT_HOURS past it is let go. A
 sale that filled nothing is not tried again for config.SALE_RETRY_SECONDS,
-since a book can show a bid an order never reaches. A sale its venue
-turned away for lack of cash waits until the cash there has grown, since a
-sale can need cash: each venue keeps one position per market, so selling
-the No one trade holds where others hold more Yes is buying Yes. The list
-is read back from the trades table when the process starts, so a restart
-does not leave a trade exposed. The settler leaves alone a trade while an
-order to flatten it is in flight.
+since a book can show a bid an order never reaches. A sale its venue turned
+away for lack of cash waits until the cash there has grown, since a sale
+can need cash: each venue keeps one position per market, so selling the No
+one trade holds where others hold more Yes is buying Yes. The list is read
+back from the trades table when the process starts, so a restart does not
+leave a trade exposed. The settler leaves alone a trade while an order to
+flatten it is in flight.
 
 Live trades a season's future, or a game before it starts, while the bet
 pays out config.MIN_PAYOUT_HOURS or more away and the edge returns
@@ -83,15 +76,14 @@ trades on, see market/exchange.py: while one has stopped, its feed may
 still show prices no order can trade at, see trading(). So must each
 leg's market: one its venue says is paused, closed, or decided, or that
 turned a live order away as not trading, is never offered, see
-market/record.py, from 2026-10-07. A trade asks for config.FILL_SHARE of
-what the books show at that edge, the share we expect to get, as far as
-the cash free on each venue pays for, live as on paper. Every trade is
-stored in the trades table as soon as it is sent and updated when it is
-done, and every dollar moved goes through the cash the executor was
-given. Live opens a trade with as little as config.LIVE_MIN_CONTRACTS,
-sized in hundredths of a contract, which both venues trade in, and paper
-in whole contracts, see fewest(). Settling what was bought is
-money/settle.py's job.
+market/record.py. A trade asks for config.FILL_SHARE of what the books show
+at that edge, the share we expect to get, as far as the cash free on each
+venue pays for, live as on paper. Every trade is stored in the trades table
+as soon as it is sent and updated when it is done, and every dollar moved
+goes through the cash the executor was given. Live opens a trade with as
+little as config.LIVE_MIN_CONTRACTS, sized in hundredths of a contract,
+which both venues trade in, and paper in whole contracts, see fewest().
+Settling what was bought is money/settle.py's job.
 """
 
 import asyncio
@@ -572,9 +564,8 @@ class Executor:
         Whether an edge is worth the capital it ties up until the bet pays at
         pays_at: when this executor trades, see pays_in_time(), and returning
         config.MIN_ANNUAL_PCT a year or more until then, but on a game under
-        way any edge, from 2026-10-05 at the user's asking: it pays within
-        config.MAX_PAYOUT_HOURS, where five cents returns over 1,900% a year,
-        so the rate never turned one down.
+        way any edge: it pays within config.MAX_PAYOUT_HOURS, where five
+        cents returns over 1,900% a year.
         """
         if not pays_at or not self.pays_in_time(hours_between(now, pays_at), pair):
             return False
@@ -665,21 +656,17 @@ class Executor:
 
     def quantity_for(self, legs, least, most=None):
         """
-        Set each leg's limit and return how many contracts to ask for. The
-        two ladders are walked together through the levels that keep an
-        edge of least, see min_edge(), each limit set at the deepest level
-        reached. The quantity is config.FILL_SHARE of what those levels
-        show, the share we expect to get, so an unchanged book fills in
-        full, and no more than the cash free pays for, fees included, see
-        order_cost(), both legs' at once where they share a venue's cash.
-        Until 2026-10-10 the fees were left out, so a trade the cash sized
-        was turned away for them: Kalshi refused trade 4003's 48.14
-        contracts at 53 cents, 25.51$, on a shard holding about that, for
-        the 0.84$ fee, and Polymarket US's leg, filled first, was sold back
-        for 2.09$ less. Given most, it is no more than that, and the walk
-        stops at the levels that hold it, so no limit goes deeper than
-        those. It is cut to whole steps, see step: whole contracts on
-        paper, hundredths live.
+        Set each leg's limit and return how many contracts to ask for. The two
+        ladders are walked together through the levels that keep an edge of
+        least, see min_edge(), each limit set at the deepest level reached.
+        The quantity is config.FILL_SHARE of what those levels show, the share
+        we expect to get, so an unchanged book fills in full, and no more than
+        the cash free pays for, fees included, see order_cost(), both legs' at
+        once where they share a venue's cash: a venue turns away an order
+        whose fee the cash does not cover. Given most, it is no more than
+        that, and the walk stops at the levels that hold it, so no limit goes
+        deeper than those. It is cut to whole steps, see step: whole contracts
+        on paper, hundredths live.
         """
         yes_leg, no_leg = legs
         yes_book, no_book = self.book(yes_leg.key), self.book(no_leg.key)
@@ -710,13 +697,12 @@ class Executor:
         its episode again, see Scanner.offer_again(), when it matched
         something and left nothing to flatten, so an edge lasting past the
         trade is traded again, once it has lasted as live waits for any edge
-        to, counted from now. From 2026-10-08, at the user's asking: of 134
-        live futures trades from 2026-10-05, most edges ended with the
-        trade, but 24 lasted a minute or more past it. A trade that matched
-        nothing, its quote likely gone, or that left a leg to flatten ends
-        the executor's trading of the episode, as every trade did before,
-        and so does every trade on a game, whose edges last a fraction of a
-        second and whose larger orders mostly fail.
+        to, counted from now: most edges end with the trade, but some last a
+        minute or more past it. A trade that matched nothing, its quote
+        likely gone, or that left a leg to flatten ends the executor's
+        trading of the episode, and so does every trade on a game, whose
+        edges last a fraction of a second and whose larger orders mostly
+        fail.
         """
         if self.offer_again is None or done.cancelled() or done.exception() is not None:
             return
@@ -746,10 +732,10 @@ class Executor:
         edge, see quantity_for(). The cost is reserved here, before anything
         is awaited, so a second signal in the same moment sees what is left.
         A signal with a leg on a contract that a trade still in flight has a
-        leg on is turned down, see busy, from 2026-10-12: a contract may be in
-        a pair and in the nested pairs of its line, see catalog/nest.py, and
-        two trades sent on it at once would race for the same levels, the
-        loser left to sell its other leg back.
+        leg on is turned down, see busy: a contract may be in a pair and in
+        the nested pairs of its line, see catalog/nest.py, and two trades sent
+        on it at once would race for the same levels, the loser left to sell
+        its other leg back.
         """
         least = self.min_edge(pair, yes, no, now)
         if edge < least:

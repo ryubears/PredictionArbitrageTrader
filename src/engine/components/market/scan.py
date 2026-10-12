@@ -11,7 +11,7 @@ filled at the peak by walking the books' depth, and the return on the
 capital tied up, annualized as if held until the bet pays out. A nested
 pair, yes on one line of a bet and no on a higher one, see
 catalog/nest.py, is priced as any other, each member holding only its own
-side, see pricing.best_trade(), from 2026-10-12.
+side, see pricing.best_trade().
 
 Within an episode the edge worth trading, config.MIN_EDGE or more, may
 come and go. The Opportunity also keeps the longest unbroken stretch of it,
@@ -24,14 +24,11 @@ fillable on the levels at live's least edge or more, see
 pricing.live_min_edge(), and what they lock in, and whether that moment
 came with a change of the Polymarket US leg's book. It is the best of the
 moments at the peak's edge, and of every moment while none of those had
-offered config.LIVE_MIN_CONTRACTS, the fewest live opens a trade with, a
-whole contract until 2026-10-07: a peak's first moment can offer less,
-where live trades a moment later at the same edge or a little less. Until
-2026-10-06 only the peak's first moment counted, and 21 of 55 live futures
-trades that evening came from episodes kept with under a contract. Only
-the moments once the edge has stayed at live's least edge or more for
-config.LIVE_HOLD_SECONDS count, since live trades it only then: on a game
-under way from 2026-10-06, on a future from 2026-10-07.
+offered config.LIVE_MIN_CONTRACTS, the fewest live opens a trade with: a
+peak's first moment can offer less, where live trades a moment later at
+the same edge or a little less. Only the moments once the edge has stayed
+at live's least edge or more for config.LIVE_HOLD_SECONDS count, since
+live trades it only then.
 
 The episode also follows that stretch at live's least edge, see
 edge_since(), and keeps when each member's book had last changed as it
@@ -39,17 +36,16 @@ began, see edge_books(): live counts a Polymarket US leg's wait for its
 book to catch up from the other leg's change as of then, so a change that
 leaves the edge where live takes it does not start the wait again.
 
-The recorder drives the Scanner with the books it holds in memory and
-the Scanner stores every episode as it ends, so the opportunities table
-is the log of everything it saw. The summary script reads it. The
-pricing itself lives in pricing.py. A member whose market is not trading,
-as its venue says or an order it turned away showed, is left out, as a
-stale book is, and so is a future's member past its close time, so an
-edge on a market that cannot trade is never offered, from 2026-10-07. So
-is a member whose venue is in its weekly maintenance, see
-common/venues.py, from 2026-10-08: its book may freeze, or go on
-changing, while no order can trade at it, so an episode open as the
-window begins ends then, and none opens on the pair until it is over.
+The recorder drives the Scanner with the books it holds in memory and the
+Scanner stores every episode as it ends, so the opportunities table is the
+log of everything it saw. The summary script reads it. The pricing itself
+lives in pricing.py. A member whose market is not trading, as its venue
+says or an order it turned away showed, is left out, as a stale book is,
+and so is a future's member past its close time, so an edge on a market
+that cannot trade is never offered. So is a member whose venue is in its
+weekly maintenance, see common/venues.py: its book may freeze, or go on
+changing, while no order can trade at it, so an episode open as the window
+begins ends then, and none opens on the pair until it is over.
 
 A desk that turns an edge down only to wait for a book to catch up, or
 for the edge to last, see edge_since(), asks for the pair again once the
@@ -272,8 +268,7 @@ class Scanner:
         the episode when it is the best yet: the contracts fillable on the
         levels at live's least edge on the pair, floor, or more, see
         live_floor(), the net dollars they lock in, and whether the pricing
-        came with a change of the Polymarket US leg's book, which live traded
-        a game under way on from 2026-10-05 to 10-06, see
+        came with a change of the Polymarket US leg's book, see
         pricing.polymarket_us_just_changed(). The best has
         config.LIVE_MIN_CONTRACTS or more, the fewest live opens a trade with,
         then the most profit. A moment counts only once the episode's edge has
@@ -372,14 +367,13 @@ class Scanner:
 
     def offer_again(self, desk, pair_id, signal_ts, now):
         """
-        Offer the desk at position desk the pair's episode again: its
-        trade on it, signalled at signal_ts, is done at now, see
-        Executor.again(). An edge lasting past a future's trade is traded
-        again from 2026-10-08, at the user's asking, where before an
-        episode made one trade a desk. Nothing changes when the episode
-        has ended since, a later one being its own. The edge counts from
-        now for the desk's wait, see edge_since(), and the pair is priced
-        again once that is over, as no book may change to bring it.
+        Offer the desk at position desk the pair's episode again: its trade
+        on it, signalled at signal_ts, is done at now, see
+        Executor.again(), so an edge lasting past a future's trade is
+        traded again. Nothing changes when the episode has ended since, a
+        later one being its own. The edge counts from now for the desk's
+        wait, see edge_since(), and the pair is priced again once that is
+        over, as no book may change to bring it.
         """
         episode = self.episodes.get(pair_id)
         if episode is None or seconds_between(episode.start_ts, signal_ts) < 0:

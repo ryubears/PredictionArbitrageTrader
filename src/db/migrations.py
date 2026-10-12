@@ -230,10 +230,8 @@ def step_11_order_book_times(conn):
 
 def step_12_trades_in_play(conn):
     """
-    Trades now say whether their game was under way at the signal, which
-    counted the live trades on games under way toward the 200 the build of
-    2026-10-05 made. Older trades did not, so theirs is null and none of
-    them counted.
+    Trades now say whether their game was under way at the signal. Older
+    trades did not, so theirs is null.
     """
     add_columns(conn, "trades", ["in_play"], "INTEGER")
 
@@ -250,9 +248,7 @@ def step_13_opportunities_take(conn):
 def step_14_opportunities_pm_changed(conn):
     """
     Episodes now say whether their peak came with a change of the
-    Polymarket US leg's book, which the summary counted an episode in play
-    by from 2026-10-05 to 10-06. Older episodes did not, so theirs is null
-    and the summary left those in play out.
+    Polymarket US leg's book. Older episodes did not, so theirs is null.
     """
     add_columns(conn, "opportunities", ["pm_changed"], "INTEGER")
 

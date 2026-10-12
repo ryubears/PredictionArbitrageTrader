@@ -74,7 +74,7 @@ def test_only_episodes_within_the_rules_are_shown(tmp_path, monkeypatch, capsys)
             episode("2026-09-27T16:00:00+00:00", 2, 0.015, 100),          # 1.5 cents paying in two days: a future has no 2 cent minimum.
             episode("2026-09-27T16:30:00+00:00", 2, 0.03, 100, lasted=0.004),      # 3 cents paying in two days, 278% a year.
             episode("2026-09-27T16:45:00+00:00", 2, 0.06, 0.06, lasted=900),        # Under a tenth of a contract at the peak, however long.
-            episode("2026-09-27T16:46:00+00:00", 2, 0.06, 0.5),                     # Half a contract, which live opens from 2026-10-07.
+            episode("2026-09-27T16:46:00+00:00", 2, 0.06, 0.5),                     # Half a contract, which live opens.
             # Live took the one contract at the peak, which left 0.29 fillable through the stretch.
             episode("2026-09-27T16:50:00+00:00", 2, 0.14, 0.29, take=1),
             episode("2026-09-27T17:00:00+00:00", 2, 0.08, 100, live=1)])  # During a game.
@@ -179,7 +179,7 @@ def held_trade(conn, mode="live", pair_id=1, signal=BEFORE, held=(5, 5), cost=(2
 def test_a_markets_trades_show_by_kind_largest_open_ones_opened_by_outcome_then_the_open_trades(tmp_path, monkeypatch, capsys):
     def fill(conn):
         open_trades(conn)
-        # One settled in the window, whose legs no table lists by venue any more.
+        # One settled in the window.
         t = held_trade(conn, signal=INSIDE, held=(10, 10), cost=(4.5, 4.7), profit=0.80)
         s = Settlement(t.id, INSIDE, mode="live")
         s.record("yes", "yes", 10.0, INSIDE)
@@ -246,7 +246,7 @@ def test_open_trades_none_opened_in_the_window_list_no_table(tmp_path, monkeypat
 
 
 def test_contract_counts_show_to_the_hundredth_without_float_noise():
-    # Matched contracts summed to 0.21000000000000002 in the live outcomes on 2026-10-02.
+    # Matched contracts can sum to 0.21000000000000002.
     assert [summary.contracts(v) for v in (0.21000000000000002, 284532, 630.0, 13.6, None)] == ["0.21", "284,532", "630", "13.6", "0"]
 
 
