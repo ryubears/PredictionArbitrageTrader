@@ -31,7 +31,11 @@ while Kalshi's fills, and a leg that misses first leaves nothing to sell
 back. In the in-play test of 2026-10-04 live trades sent that way made
 3.84$ on 69 trades, and those sending both at once lost 3.84$ on 78: they
 matched about as many contracts, but 52 of them were left on one leg to
-sell back, against 12.
+sell back, against 12. From 2026-10-12 live's Kalshi order on a game
+under way may give up part of the edge left once Polymarket US has
+filled, as config.LIVE_IN_PLAY_ALLOWANCE says, see follow_limit(): Kalshi's
+price had often moved by the time its order came, and selling Polymarket
+US's contracts back cost more than the edge the room gives up.
 
 When the two legs fill unevenly the executor goes flat at once by selling
 the excess back on its own venue, and records the result with fees. A
@@ -103,6 +107,8 @@ from db.models import Ledger, Leg, Trade
 from engine.helper import config, fees, game
 from engine.helper.pricing import annual_pct, changed_at, depth, fresh, in_steps, ladder, reach, sell_ladder, sweep, trade_words
 
+CENT = 0.01     # The step a limit raised for the leg sent second is cut to, a price every market on both venues takes.
+
 
 def shard(leg):
     """
@@ -119,13 +125,14 @@ def flattened_until(trade):
     return shift(trade.pays_at, hours=config.FLATTEN_PAST_PAYOUT_HOURS)
 
 
-def order_cost(leg, quantity):
+def order_cost(leg, quantity, limit=None):
     """
-    The most quantity contracts of a leg can cost at its limit, its venue's fee included, as the venue checks the cash for
-    an order before taking it. A level below the limit costs less, fee and all, as the fee never changes faster than the
-    price.
+    The most quantity contracts of a leg can cost at its limit, or at limit when given, its venue's fee included, as the
+    venue checks the cash for an order before taking it. A level below the limit costs less, fee and all, as the fee never
+    changes faster than the price.
     """
-    return quantity * leg.limit + fees.fee(leg.venue, leg.limit, quantity, leg.fee_info)
+    limit = leg.limit if limit is None else limit
+    return quantity * limit + fees.fee(leg.venue, limit, quantity, leg.fee_info)
 
 
 @dataclass
@@ -346,7 +353,8 @@ class Executor:
         Both go out at once, unless the trade has a lead in leads: then the
         leg on that venue goes first, and the other only once it has
         answered, for no more than it filled, and not at all when it filled
-        nothing, so a lead that misses leaves nothing to sell back.
+        nothing, so a lead that misses leaves nothing to sell back. The
+        other's limit may first be raised, see follow_limit().
         """
         lead = self.leads.pop(trade.id, None)
         if lead is None:
@@ -354,12 +362,56 @@ class Executor:
         first = next(leg for leg in legs if leg.venue == lead)
         second = next(leg for leg in legs if leg is not first)
         led = await self.fill(trade, first)
+        held = order_cost(second, second.quantity)      # What signal() held back for the second leg's order.
         second.quantity = order_size(min(second.quantity, led.filled))
         if second.quantity < self.step:
             follow = Fill(ts=led.ts, note=f"not sent, as {lead} filled nothing first")
         else:
-            follow = await self.fill(trade, second, led.ts)
+            extra = self.follow_limit(trade, led, second, held)
+            try:
+                follow = await self.fill(trade, second, led.ts)
+            finally:
+                if extra:
+                    self.cash.release(second.venue, extra, shard(second))
         return [led, follow] if legs[0] is first else [follow, led]
+
+    def allowance(self, trade):
+        """
+        The share of the edge left once the leg sent first has filled that
+        the other leg's order may give up to fill, see follow_limit(): none
+        on paper, which sends its legs at the signal's limits, and live's
+        own on a game under way, see LiveExecutor.allowance().
+        """
+        return 0.0
+
+    def follow_limit(self, trade, led, follow, held):
+        """
+        Raise the limit of the leg sent second, follow, once the first has
+        filled at led's average cost a contract, fees included, so it may
+        give up allowance() of the edge left between that cost and its
+        limit, fees included, to fill. The limit is cut to the cent below,
+        is never past 0.99, and goes no further than the cash free on its
+        venue, or shard, pays for beyond held, what was held back for the
+        order at its old limit. Returns the dollars held back beyond held,
+        which the caller gives back once the order has answered. The trade
+        keeps the signal's limits, and the order its own, see Order.
+        """
+        share = self.allowance(trade)
+        left = 1 - led.average - fees.cost_per_contract(follow.venue, follow.limit, follow.fee_info)
+        if share <= 0 or left <= 0 or not led.filled:
+            return 0.0
+        most = 1 - led.average - (1 - share) * left        # The most each contract may cost, fee included.
+        limit = min(math.floor(round(most * 100, 6)) / 100, 1 - CENT)
+        while limit > follow.limit + 1e-9:
+            extra = order_cost(follow, follow.quantity, limit) - held
+            if (fees.cost_per_contract(follow.venue, limit, follow.fee_info) <= most + 1e-9
+                    and extra <= self.cash.spendable(follow.venue, shard(follow)) + 1e-9):
+                follow.limit = limit
+                extra = max(extra, 0.0)
+                self.cash.reserve(follow.venue, extra, shard(follow))
+                return extra
+            limit = round(limit - CENT, 2)
+        return 0.0
 
     async def run_trade(self, trade, legs):
         """

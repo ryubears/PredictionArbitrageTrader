@@ -29,7 +29,9 @@ Live trades the futures, see executor.py, and with run.py --live-in-play
 also the games, matches, and races under way that pay within
 config.MAX_PAYOUT_HOURS, by its own rules below. With its legs on two
 venues, Polymarket US's order goes first and Kalshi's only once that has
-answered, for what it filled, see Executor.fill_legs(). From 2026-10-04 to
+answered, for what it filled, see Executor.fill_legs(), on a game under way
+at a limit raised by up to config.LIVE_IN_PLAY_ALLOWANCE of the edge left,
+from 2026-10-12, see allowance(). From 2026-10-04 to
 10-05 the in-play test traded 200 of them at no more than 5 contracts,
 each beside a paper twin on the same signal, see tools/in_play_test.py.
 When paper trades the same games, each live order leaves a footprint of
@@ -291,6 +293,16 @@ class LiveExecutor(Executor):
         cost 12.85$ to sell back or stayed exposed.
         """
         return super().lead(yes, no, True)
+
+    def allowance(self, trade):
+        """
+        config.LIVE_IN_PLAY_ALLOWANCE on a game under way, so Kalshi's order,
+        sent once Polymarket US's has filled, may give up that share of the
+        edge left to fill, see Executor.follow_limit(). Nothing on a future,
+        whose orders sweep only the levels that return config.MIN_ANNUAL_PCT
+        a year, see min_edge().
+        """
+        return config.LIVE_IN_PLAY_ALLOWANCE if trade.in_play else 0.0
 
     def signal(self, pair, yes, no, edge, size, fee_infos, now):
         """

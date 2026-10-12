@@ -694,8 +694,10 @@ def test_live_trades_a_game_under_way_at_most_twenty_contracts_polymarket_us_fir
     t = stored(conn)[0]
     # Twenty contracts need the second level, so the limit goes no deeper, though the third keeps two cents too.
     assert (t["quantity"], t["yes_limit"], t["no_limit"], t["status"], t["in_play"]) == (20, 0.46, 0.47, "filled", 1)
-    # Polymarket US's order goes first, and Kalshi's once it has answered, for what it filled.
-    assert venues.orders == [("polymarket_us", "buy", "yes", 20, 0.46), ("kalshi", "buy", "no", 20, 0.47)]
+    # Polymarket US's order goes first, and Kalshi's once it has answered, for what it filled, its limit raised to give up
+    # half the edge left: 0.46 paid and Kalshi's 0.47 leave seven cents, so Kalshi may pay 0.505, 0.50 to the cent.
+    # The trade keeps the signal's limits.
+    assert venues.orders == [("polymarket_us", "buy", "yes", 20, 0.46), ("kalshi", "buy", "no", 20, 0.50)]
 
 
 def test_in_play_a_game_not_yet_under_way_and_one_paying_too_late_are_not_traded(tmp_path):
@@ -719,6 +721,7 @@ def test_in_play_a_future_is_traded_as_ever_polymarket_us_first(tmp_path):
     conn, ex = in_play(tmp_path, venues, books())
     assert signal(ex, FUTURE, SURE)
     assert stored(conn)[0]["quantity"] == 10                            # Half the 20 the books show.
+    # Kalshi's limit is not raised: a future gives up none of its edge, see LiveExecutor.allowance().
     assert venues.orders == [("polymarket_us", "buy", "yes", 10, 0.45), ("kalshi", "buy", "no", 10, 0.47)]
 
 
@@ -747,7 +750,8 @@ def test_polymarket_us_first_sends_kalshi_only_what_it_filled_and_nothing_when_i
     conn, ex = in_play(tmp_path, venues, books(size=100))
     assert signal(ex)
     t = stored(conn)[0]
-    assert venues.orders == [("polymarket_us", "buy", "yes", 20, 0.45), ("kalshi", "buy", "no", 3, 0.47)]
+    # Kalshi's limit gives up half the eight cents left past 0.45 paid, see test_in_play_kalshi_may_give_up_half_the_edge_left.
+    assert venues.orders == [("polymarket_us", "buy", "yes", 20, 0.45), ("kalshi", "buy", "no", 3, 0.51)]
     assert (t["quantity"], t["yes_filled"], t["no_filled"], t["matched"], t["status"]) == (20, 3, 3, 3, "partial")
     assert signal(ex, {**GAME, "id": 2})
     t = stored(conn)[1]
@@ -756,6 +760,50 @@ def test_polymarket_us_first_sends_kalshi_only_what_it_filled_and_nothing_when_i
     assert (t["yes_filled"], t["no_filled"], t["yes_held"], t["no_held"], t["status"]) == (0, 0, 0, 0, "failed")
     assert t["hedge"] == "no leg not sent, as polymarket_us filled nothing first"
     assert ex.cash.reserved == {} or not any(ex.cash.reserved.values())
+
+
+CHARGED = {("polymarket_us", "pm"): NO_PM_FEES, ("kalshi", "k"): {"fee_type": "quadratic", "fee_multiplier": 1}}   # Kalshi's fee.
+
+
+def test_in_play_kalshi_may_give_up_half_the_edge_left_fees_included(tmp_path):
+    def dear(quantity, price):          # Filled at 0.53, so nothing is left of the edge past Kalshi's 0.47.
+        return orders.Answer("venue-dear", "filled", quantity, quantity * 0.53, 0.0, None, {})
+    venues = Venues(polymarket_us=[fills(), dear], kalshi=[fills(), fills()])
+    conn, ex = in_play(tmp_path, venues, books())
+
+    def send(pair):
+        async def scenario():
+            sent = ex.signal(pair, YES, NO, 0.06, 100, CHARGED, UNDER_WAY)
+            await asyncio.gather(*ex.tasks)
+            return sent
+        return asyncio.run(scenario())
+    assert send(GAME)
+    # Polymarket US's 10 cost 0.45 each, and Kalshi's no at 0.47 costs 0.4874 with its 0.0174 fee, which leaves 6.26 cents.
+    # Kalshi may give up half of them, paying up to 0.5187 a contract, fee included: 0.51 would cost 0.5275 with its fee, so
+    # its limit is 0.50, which costs 0.5175.
+    assert venues.orders == [("polymarket_us", "buy", "yes", 10, 0.45), ("kalshi", "buy", "no", 10, 0.50)]
+    t = stored(conn)[0]
+    assert (t["yes_limit"], t["no_limit"], t["status"]) == (0.45, 0.47, "filled")    # The trade keeps the signal's limits.
+    assert t["profit"] == pytest.approx(10 * (1 - 0.45 - 0.50))
+    assert send({**GAME, "id": 2})
+    assert venues.orders[-1] == ("kalshi", "buy", "no", 10, 0.47)       # With no edge left Kalshi's limit stays.
+
+
+def test_in_play_kalshi_gives_up_no_more_than_the_cash_pays_for_held_back_while_its_order_is_out(tmp_path):
+    free = []                           # Kalshi's free cash as its order went out.
+
+    def kalshi(quantity, price):
+        free.append(cash.available("kalshi"))
+        return fills()(quantity, price)
+    venues = Venues(polymarket_us=[fills()], kalshi=[kalshi])
+    latest = {key: Book(b.venue, b.contract_id, UNDER_WAY, b.bids, b.asks) for key, b in books().items()}
+    conn, cash, ex = executor(tmp_path, venues, latest, balance=4.90, now=UNDER_WAY, in_play=True)
+    assert signal(ex)
+    # 10 contracts at 0.47 hold back 4.70$ of Kalshi's 4.90$. Half the eight cents left would take the limit to 0.51, 5.10$
+    # in all, but the 0.20$ still free pays for 0.49 alone. That is held back while the order is out, and given back after.
+    assert venues.orders == [("polymarket_us", "buy", "yes", 10, 0.45), ("kalshi", "buy", "no", 10, 0.49)]
+    assert free == [pytest.approx(0.0)]
+    assert cash.available("kalshi") == pytest.approx(4.90 - 10 * 0.49) and not any(cash.reserved.values())
 
 
 # FUTURES, live trading a future by its return a year alone
@@ -786,7 +834,8 @@ def test_in_play_live_takes_an_edge_of_two_cents_or_more(tmp_path):
     assert not signal(ex, edge=0.01) and venues.orders == []
     latest[("polymarket_us", "pm")] = Book("polymarket_us", "pm", UNDER_WAY, [[0.50, 20]], [[0.51, 20]])    # Two cents.
     assert signal(ex, edge=0.02)
-    assert venues.orders == [("polymarket_us", "buy", "yes", 10, 0.51), ("kalshi", "buy", "no", 10, 0.47)]
+    # Kalshi's order may give up a cent of the two left, see test_in_play_kalshi_may_give_up_half_the_edge_left.
+    assert venues.orders == [("polymarket_us", "buy", "yes", 10, 0.51), ("kalshi", "buy", "no", 10, 0.48)]
 
 
 def test_in_play_live_asks_no_return_a_year_of_a_game_under_way(tmp_path, monkeypatch):

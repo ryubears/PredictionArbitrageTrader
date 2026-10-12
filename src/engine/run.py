@@ -307,7 +307,8 @@ class Session:
                 + (f", not of {', '.join(self.not_live)}" if self.not_live else ""))
             if self.live_in_play:
                 log(f"live also trades the games, matches, and races under way of every sport that pay within "
-                    f"{config.MAX_PAYOUT_HOURS}h, {in_play_settings()}, Polymarket US's order first and Kalshi's for what it filled")
+                    f"{config.MAX_PAYOUT_HOURS}h, {in_play_settings()}, Polymarket US's order first and Kalshi's for what it filled, "
+                    f"giving up as much as {config.LIVE_IN_PLAY_ALLOWANCE:.0%} of the edge left")
             if not notify.EMAIL_FILE.exists():
                 log(f"no email settings in {notify.EMAIL_FILE}, alerts are only logged and stored")
         if any(d.mode == "paper" for d in self.desks):

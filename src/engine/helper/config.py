@@ -102,6 +102,15 @@ LIVE_IN_PLAY_CONTRACTS = 20     # The most contracts a live trade on a game unde
                                 # US, sold back for 6.48$ less. From 2026-10-06 15:34 to 10-10 17:55 UTC live made 26.67$ in play,
                                 # where a cap of 10 throughout would have made some 22$: of the 162 trades asking the cap, 10 matched
                                 # it in full, and one at 100 lost 7.82$ when Kalshi filled none of Polymarket US's 100.
+LIVE_IN_PLAY_ALLOWANCE = 0.5    # The share of the edge left once Polymarket US's leg has filled, between what it cost and Kalshi's
+                                # limit, that Kalshi's order on a game under way may give up to fill: its limit is raised, to the
+                                # cent, as far as keeps the rest, fees included, see Executor.follow_limit(). From 2026-10-12, at the
+                                # user's asking. From 2026-10-06 15:34 to 10-11 23:00 UTC Polymarket US filled more than Kalshi on
+                                # 210 trades in play, 1,016 contracts, Kalshi filling none of them on 199, its price gone by the
+                                # time our order came. Selling those back cost 47.95$, 4.72 cents a contract, of the 129.00$ the
+                                # in-play trades locked in, where the edge on them had been 6.32 cents. An immediate or cancel order
+                                # fills at the best price there is, so the room costs nothing where Kalshi's price has not moved.
+                                # A future's legs keep their limits, as every level its orders sweep must return MIN_ANNUAL_PCT.
 LIVE_MIN_CONTRACTS = 0.1        # The fewest contracts a live trade opens with, on a future or a game, in hundredths above it, which both
                                 # venues take orders and fill in. One whole contract until 2026-10-07, when the user asked for a tenth:
                                 # from 2026-10-05 to 10-07 the episodes offering under a contract at live's least edge would have added

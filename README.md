@@ -212,8 +212,13 @@ The status line counts the markets not trading, by venue and why.
 2. **Fill** (`run_trade`). With a leg on each venue, live's Polymarket US
    order goes first and its Kalshi order only once that has answered, for
    what it filled, and not at all when it filled nothing (`fill_legs`,
-   `lead`). Paper does so on a game under way, and sends both at once
-   before one, as either does with both legs on one venue.
+   `lead`). On a game under way live first raises the Kalshi order's limit
+   so it may give up half the edge left between what Polymarket US's
+   contracts cost and that limit, fees included (`follow_limit`,
+   `LIVE_IN_PLAY_ALLOWANCE`), holding back any cash that needs until the
+   order answers. Paper does so on a game under way, at the signal's
+   limits, and sends both at once before one, as either does with both legs
+   on one venue.
    - Paper (`trading/paper.py`): each order takes a trip there and back
      drawn from what the live orders took, and fills against the book the
      venue had when it would have arrived, by the venue's own clock, from
@@ -826,7 +831,9 @@ Kalshi contract gives none, paying within 24 hours (`MAX_PAYOUT_HOURS`),
 sized as any trade, by the books and the cash. Its Polymarket US order
 goes first and its Kalshi order only once that has answered, for what it
 filled, and not at all when it filled nothing (`Executor.fill_legs`);
-paper does the same in play. Sent at once the Kalshi leg lands first, in
+paper does the same in play. From 2026-10-12 that Kalshi order may pay
+more than the signal's price, giving up as much as half the edge left,
+below. Sent at once the Kalshi leg lands first, in
 some 12 ms against Polymarket US's 59, and another trader may take the
 Polymarket US quote away once ours trades, leaving the Kalshi leg to sell
 back at a loss. Sent first, a Polymarket US leg that misses leaves nothing
@@ -895,8 +902,21 @@ trade asks for no more than 20 contracts (`LIVE_IN_PLAY_CONTRACTS`), 100
 from 2026-10-10 13:01 UTC to that evening, 50 from 2026-10-08, and 10
 before, its limits going no deeper than the levels
 that hold them, and a tenth of one or more, with no limit on how many such
-trades. Each trade says whether its game was under way at the signal (the
-trades table's `in_play`, null before 2026-10-05). Lasting does not make an
+trades. Once Polymarket US's order has filled, Kalshi's limit is raised so
+it may give up half the edge left (`LIVE_IN_PLAY_ALLOWANCE`, 0.5, from
+2026-10-12, `Executor.follow_limit`): the edge between what Polymarket
+US's contracts cost, fees included, and Kalshi's limit with its fee. The
+new limit keeps the other half, to the cent below, no higher than 0.99,
+and goes no further than the cash free on the market's Kalshi shard pays
+for beyond what the trade already held back, which is held back while
+the order is out and given back once it answers. An immediate or cancel
+order fills at the best price there is, so the room costs nothing where
+Kalshi's price has not moved. The trade keeps the signal's limits and the
+order its own (`orders.limit_price`), so comparing them shows what the
+room cost. A future's Kalshi order keeps its limit, as every level its
+orders sweep must return the rate a year. Each trade says whether its
+game was under way at the signal (the trades table's `in_play`, null
+before 2026-10-05). Lasting does not make an
 edge real: the two Bitcoin window episodes of 2026-10-05 that showed $5,304
 stayed at two cents or more for one and two minutes, likely a book left
 standing on a market no longer trading; when that book is Polymarket US's,
@@ -1586,6 +1606,22 @@ largest results were one trade each: a Counter-Strike match matching 50
 at 15 cents for 7.48$, and a Dota 2 map at 100 that Polymarket US filled
 and Kalshi did not, sold back for 7.82$ less. On the user's asking the
 cap became 20 from that evening.
+
+**Kalshi's leg giving up edge.** From October 6 15:34 UTC to October 11
+23:00, live made 7,073 trades on games under way, locking in 129.00$ and
+netting 81.04$. Polymarket US filled more than Kalshi on 210 of them,
+1,016 contracts, and Kalshi filled none of its order on 199: its price
+had moved in the time Polymarket US took to answer. Selling those
+contracts back cost 47.95$, 4.72 cents a contract, while the edge on them
+had been 6.32 cents. Dota 2 lost 12.02$ so, Counter-Strike 9.38$, tennis
+7.67$, and the NFL 7.51$. So from October 12, at the user's asking,
+Kalshi's order may give up half the edge left to fill, above: where the
+next price up still keeps half, it trades rather than leaving Polymarket
+US's contracts to sell back at a loss. The same window measured the cap,
+each band of contracts in the periods whose cap reached it: the first 5
+added 62.19$, 5 to 10 7.60$, 10 to 15 6.10$, 15 to 20 6.08$, 20 to 30
+2.67$, most of it one Counter-Strike match, 30 to 50 0.46$, and 50 to
+100 lost 5.96$, so the cap stays at 20.
 
 The honest reading is that after fees the two venues are tightly priced
 before kickoff and briefly, sharply mispriced after every scoring play.
