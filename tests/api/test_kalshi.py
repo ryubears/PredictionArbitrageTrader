@@ -304,9 +304,9 @@ def test_a_sale_turned_away_for_lack_of_cash_is_unfunded_where_a_buy_is_refused(
 @pytest.mark.parametrize("error, status", [
     (RequestFailed(400, '{"code": "insufficient_balance", "message": "insufficient balance"}'), "rejected"),     # Refused, nothing traded.
     (RequestFailed(400, '{"error":{"code":"trading_is_paused","message":"trading is paused"}}'), "closed"),      # Kalshi stopped: no refusal.
-    (RequestFailed(400, '{"error":{"code":"MARKET_NOT_ACTIVE","message":"MARKET_NOT_ACTIVE"}}'), "closed"),     # A paused market, 2026-10-07.
+    (RequestFailed(400, '{"error":{"code":"MARKET_NOT_ACTIVE","message":"MARKET_NOT_ACTIVE"}}'), "closed"),     # A paused market.
     (RequestFailed(503, "unavailable"), "error"),                                                                   # Failed on its side, it may have traded.
-    # The market's exchange shard lacked the cash, as Kalshi answered on 2026-09-29. Nothing traded, and no refusal to halt on.
+    # The market's exchange shard lacked the cash, as Kalshi answers it. Nothing traded, and no refusal to halt on.
     (RequestFailed(404, '{"error":{"code":"insufficient_shard_balance","message":"insufficient shard balance","details":'
                         '"Exchange user not found. For Predictions: reference documentation Exchange Sharding documentation."}}'), "unfilled"),
     (TimeoutError("timed out"), "error"),

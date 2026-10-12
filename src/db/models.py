@@ -128,11 +128,10 @@ class Opportunity:
     min_edge_profit: float | None = None    # Net dollars from filling them, at the stretch's thinnest moment.
     take_size: float | None = None      # Contracts fillable on the levels at live's least edge or more, see
                                         # pricing.live_min_edge(): what one order could have had at the best moment the scanner
-                                        # weighed, see Scanner.weigh_take(), at the peak alone to 2026-10-06. Null before 2026-10-05.
+                                        # weighed, see Scanner.weigh_take(). Null on older rows.
     take_profit: float | None = None    # Net dollars from filling them.
-    pm_changed: int | None = None       # 1 when that moment came with a change of the Polymarket US leg's book, which live needed
-                                        # to trade a game under way from 2026-10-05 to 10-06, see pricing.polymarket_us_just_changed(),
-                                        # 0 otherwise. Null before 2026-10-05.
+    pm_changed: int | None = None       # 1 when that moment came with a change of the Polymarket US leg's book, see
+                                        # pricing.polymarket_us_just_changed(), 0 otherwise. Null on older rows.
 
 
 @dataclass
@@ -190,7 +189,7 @@ class Trade:
     trade: str              # The two legs in words.
     signal_ts: str          # When the scanner signalled.
     edge: float             # Net dollars per contract at the signal.
-    quantity: float         # Contracts wanted on each leg: whole until 2026-10-07, to the hundredth live since.
+    quantity: float         # Contracts wanted on each leg: whole on paper, to the hundredth live.
     yes_venue: str
     yes_contract: str
     yes_polarity: str       # The side the contract pays on, so settlement knows whether the leg won.
@@ -215,7 +214,7 @@ class Trade:
     hedge: str = "none"     # How the mismatch was flattened, in words.
     hedge_pnl: float = 0.0  # Dollars gained or lost by flattening, after fees.
     status: str = "sent"    # 'sent' while in flight, then 'filled', 'partial', or 'failed'.
-    in_play: int | None = None  # 1 for a trade on a game under way at the signal, else 0. None for trades before 2026-10-05, which lack it.
+    in_play: int | None = None  # 1 for a trade on a game under way at the signal, else 0. None on older trades, which lack it.
     label: str | None = None    # The pair's label for log lines, read from the pairs table rather than stored here.
     starts_at: str | None = None    # Kickoff of the game behind the trade, read from the contracts table, for the settler.
 

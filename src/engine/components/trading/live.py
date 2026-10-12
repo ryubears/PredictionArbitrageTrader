@@ -17,13 +17,11 @@ answer, and the money is the venues' own, through LiveBalances from
 money/live.py.
 
 Both venues fill orders in hundredths of a contract, so fills, holdings,
-and the orders that flatten are all counted to the hundredth, and from
-2026-10-07 a trade opens in hundredths too, with as little as
-config.LIVE_MIN_CONTRACTS, where before it opened whole contracts, at
-least one. Every config.LIVE_POSITION_SECONDS the live executor reads each
-venue's positions and logs any contract the venue holds more or less of
-than the live trades say, which would mean the records are wrong, see
-check_positions().
+and the orders that flatten are all counted to the hundredth, and a trade
+opens in hundredths too, with as little as config.LIVE_MIN_CONTRACTS. Every
+config.LIVE_POSITION_SECONDS the live executor reads each venue's positions
+and logs any contract the venue holds more or less of than the live trades
+say, which would mean the records are wrong, see check_positions().
 
 Live trades the futures, see executor.py, and with run.py --live-in-play
 also the games, matches, and races under way that pay within
@@ -31,39 +29,29 @@ config.MAX_PAYOUT_HOURS, by its own rules below. With its legs on two
 venues, Polymarket US's order goes first and Kalshi's only once that has
 answered, for what it filled, see Executor.fill_legs(), on a game under way
 at a limit raised by up to config.LIVE_IN_PLAY_ALLOWANCE of the edge left,
-from 2026-10-12, see allowance(). From 2026-10-04 to 10-05 the in-play test
-traded 200 of them at no more than 5 contracts, each beside a paper twin on
-the same signal, see tools/in_play_test.py.
+see allowance(). tools/in_play_test.py compares live trades in play with
+paper twins on the same signals.
 When paper trades the same games, each live order leaves a footprint of
 what it took, which paper adds back, see footprints.py.
 
 Live takes a future's edge when it returns config.MIN_ANNUAL_PCT a year
 until it pays, its orders sweeping only the levels that return that, not
-every level down to config.MIN_EDGE, see min_edge(). On a game under way
-it takes an edge of config.LIVE_IN_PLAY_MIN_EDGE or more, two cents, and
-asks for no more than config.LIVE_IN_PLAY_CONTRACTS a trade, twenty,
-with no limit on how many such trades. Either only once the edge has
-stayed at that least edge or more for config.LIVE_HOLD_SECONDS, a tenth of
-a second, by the scanner's episode: one that ends sooner is never traded,
-and one still there when the time is up is priced again then and traded,
-see hold(). A Polymarket US leg's book must still be current, counted
-from the Kalshi leg's change as of when the edge began, see opened(). All
-at the user's asking: the games' rules from 2026-10-06, their wait half a
-second until 2026-10-07, when futures, taken at once until then, began
-waiting too, and the book's wait stopped starting again on a change that
-left the edge. From 2026-10-05 04:07 UTC to that day's 15:14 UTC build
-every edge, futures' too, waited half a second; then a game's was taken
-at five cents, five contracts a trade, for 200 trades, only on the signal
-a change of the Polymarket US leg's book brought, which in seven hours let
-one episode through.
+every level down to config.MIN_EDGE, see min_edge(). On a game under way it
+takes an edge of config.LIVE_IN_PLAY_MIN_EDGE or more and asks for no more
+than config.LIVE_IN_PLAY_CONTRACTS a trade, with no limit on how many such
+trades. Either only once the edge has stayed at that least edge or more for
+config.LIVE_HOLD_SECONDS, by the scanner's episode: one that ends sooner is
+never traded, and one still there when the time is up is priced again then
+and traded, see hold(). A Polymarket US leg's book must still be current,
+counted from the Kalshi leg's change as of when the edge began, see
+opened().
 
-An order its venue turned away because the market was not trading,
-paused, closed, or decided, or because the exchange had stopped, is
-closed, see orders.closed(). Nothing traded, and the market is left alone
-for config.CLOSED_MARKET_SECONDS, or until its venue says it trades, see
-Recorder.refuse(), so no more orders go to it, and from 2026-10-07 it is
-no refusal to the brakes. On 2026-10-07 a paused CS2 match's Kalshi leg
-was turned away so after its Polymarket US leg had filled.
+An order its venue turned away because the market was not trading, paused,
+closed, or decided, or because the exchange had stopped, is closed, see
+orders.closed(). Nothing traded, and the market is left alone for
+config.CLOSED_MARKET_SECONDS, or until its venue says it trades, see
+Recorder.refuse(), so no more orders go to it, and it is no refusal to the
+brakes.
 
 An order whose outcome cannot be known, because no answer came, the venue
 failed on its side, or its answer cannot be read, leaves what its trade
@@ -244,8 +232,8 @@ class LiveExecutor(Executor):
         How many seconds until the pair's edge has stayed at live's least
         edge or more, see min_edge(), for config.LIVE_HOLD_SECONDS, by the
         scanner's episode, see pricing.live_hold(), 0 once it has, or without
-        a scanner to say when it began, as in tests. On a future too from
-        2026-10-07, taken at once until then.
+        a scanner to say when it began, as in tests. On a future as on a
+        game.
         """
         since = self.edge_since(pair["id"]) if self.edge_since else None
         return 0.0 if since is None else live_hold(since, now)
@@ -258,10 +246,10 @@ class LiveExecutor(Executor):
         confirm_wait(), counts from the other leg's change as of then: a
         change since that left the edge there does not start it again.
         Polymarket US's order goes first, see lead(), so a quote it no
-        longer shows costs only an order that fills nothing. Before
-        2026-10-07 every Kalshi change started it again, and in a game under
-        way, where Kalshi's books change many times a second, an edge could
-        wait as long as it lasted.
+        longer shows costs only an order that fills nothing. Were every
+        Kalshi change to start it again, an edge in a game under way, where
+        Kalshi's books change many times a second, could wait as long as it
+        lasted.
         """
         return self.edge_books(pair["id"]) if self.edge_books else {}
 
@@ -288,10 +276,9 @@ class LiveExecutor(Executor):
     def lead(self, yes, no, under_way):
         """
         Polymarket US, with a leg on each venue, on a future as on a game
-        under way, from 2026-10-06. Futures sent both legs at once until
-        then: Kalshi's orders took something 99.4% of the time and Polymarket
-        US's 94%, and of 82 trades left on one leg, 79 held Kalshi's, which
-        cost 12.85$ to sell back or stayed exposed.
+        under way. Kalshi's orders take something more often than Polymarket
+        US's, so a trade sending both at once is mostly left holding Kalshi's
+        leg to sell back.
         """
         return super().lead(yes, no, True)
 

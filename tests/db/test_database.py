@@ -83,7 +83,7 @@ def test_nested_pairs_load_with_each_member_holding_its_own_side_and_are_recorde
     targets = lambda: database.load_recording_targets(conn, "nfl", "2026-06-01T00:00:00+00:00", "2026-06-08T00:00:00+00:00",
                                                       ["kalshi", "polymarket_us"], "2026-05-31T19:00:00+00:00")
     assert sorted(targets()["kalshi"]) == ["k10.5", "k9.5"]           # Kalshi's 10.5 is recorded for the nested pair alone.
-    # The next match nests nothing: the nested pair is gone, and Kalshi's 10.5 is not recorded any more.
+    # The next match nests nothing: the nested pair is gone, and Kalshi's 10.5 is not recorded.
     database.replace_nests(conn, "nfl", [], "2026-01-02T00:00:00+00:00")
     assert list(database.load_pairs(conn, "nfl")) == [low.id] and targets()["kalshi"] == ["k9.5"]
     assert conn.execute("SELECT COUNT(*) FROM nest_members").fetchone()[0] == 0
@@ -359,5 +359,5 @@ def test_orders_are_joined_to_their_trades_through_an_index(tmp_path):
     conn = database.connect(tmp_path / "t.sqlite")
     plan = " ".join(r[3] for r in conn.execute(
         "EXPLAIN QUERY PLAN SELECT t.id, MAX(o.answered_at) FROM trades t LEFT JOIN orders o ON o.trade_id = t.id GROUP BY t.id"))
-    # Without it SQLite built a throwaway index over every order on each join: some 150 ms at 116,000 orders on 2026-10-03.
+    # Without it SQLite builds a throwaway index over every order on each join.
     assert "USING INDEX idx_orders_trade" in plan and "AUTOMATIC" not in plan

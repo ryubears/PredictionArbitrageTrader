@@ -7,8 +7,7 @@ Four sections, all from what the live process already keeps:
   how many book changes arrived a minute, and how far behind the venue they
   reached us, median and 90th percentile, and how much of that was ours.
   The busiest minutes are compared with the quiet ones, which shows whether
-  a busy game slows a feed. Until 2026-09-30 Polymarket US's numbers also
-  counted the books its trade feed brought early.
+  a busy game slows a feed.
 - Orders, from the orders table: for each venue and purpose how many filled,
   and the trip there and back, split at the time the venue put on its answer.
 - Edges, from the opportunities table: how long the episodes lasted, those

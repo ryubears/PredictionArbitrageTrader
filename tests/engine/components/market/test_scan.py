@@ -332,7 +332,7 @@ def test_a_member_whose_market_is_not_trading_is_left_out_so_its_episode_ends(tm
               ("polymarket_us", "pm"): book("polymarket_us", "pm", TL % (0, 2), 0.44, 0.45)}
     s.on_book("polymarket_us", "pm", latest, TL % (0, 2))
     assert len(s.episodes) == 1
-    latest[("kalshi", "k")] = dataclasses.replace(latest[("kalshi", "k")], halted="paused")    # Its book stays up, as on 2026-10-07.
+    latest[("kalshi", "k")] = dataclasses.replace(latest[("kalshi", "k")], halted="paused")    # Its book stays up.
     s.on_book("kalshi", "k", latest, TL % (0, 3))
     assert s.episodes == {} and stored(conn)[0].end_ts == TL % (0, 3)
     latest[("kalshi", "k")] = dataclasses.replace(latest[("kalshi", "k")], halted=None)

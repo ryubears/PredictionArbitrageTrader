@@ -32,7 +32,7 @@ from db.models import Alert, Bet, Gap, Ledger, Opportunity, Order, Settlement, T
 from pathlib import Path
 
 DB_PATH = DATA_DIR / "prediction_arbitrage_trader.sqlite"
-OLD_DB_PATH = DATA_DIR / "sportsarb.sqlite"     # DB_PATH until the project was renamed on 2026-10-12, see connect().
+OLD_DB_PATH = DATA_DIR / "sportsarb.sqlite"     # The database under the project's old name, see connect().
 
 # Model fields that are read from other tables or set by the database, so they are never written.
 NOT_STORED = {"id", "label", "starts_at"}
@@ -70,8 +70,8 @@ def update_sql(table, names):
 def connect(db_path=None):
     """
     Open the database, creating the file and tables if needed. Uses DB_PATH unless a path is given, but does not create
-    it while OLD_DB_PATH is still there, so a process or catalog refresh started on the new code before the database
-    was moved does not begin again on an empty one.
+    it while OLD_DB_PATH is still there, so a process or catalog refresh started before the database is moved does not
+    begin again on an empty one.
     """
     db_path = Path(db_path or DB_PATH)
     if db_path == DB_PATH and not db_path.exists() and OLD_DB_PATH.exists():
@@ -175,7 +175,7 @@ GAMES = """
 
 # One venue and sport's contracts to record, see load_recording_targets(), of the pairs that members, a table of
 # (venue, contract_id, pair_id), puts them in, each dated by dated: a pair's bets by the bet's date, and a nested pair's
-# members, which have none, by the pair's. A query each, joined by UNION, so the pairs' runs as it did before nesting.
+# members, which have none, by the pair's. A query each, joined by UNION, so the pairs' keeps its own plan.
 TARGETS = """
     SELECT c.contract_id FROM contracts c
     JOIN {members} m ON m.venue = c.venue AND m.contract_id = c.contract_id
@@ -316,8 +316,8 @@ def load_pairs(conn, sport):
         SELECT b.*, c.event_id, c.start_time, c.close_time, c.rules FROM bets b JOIN contracts c USING (venue, contract_id)
         WHERE c.sport = ? AND b.pair_id IS NOT NULL""", (sport,)):
         members.setdefault(r["pair_id"], []).append(member(r))
-    # From the contracts of the sport, each found in nest_members by its index: on 2026-10-12 a join looking each bet up
-    # in nest_members without one read all 76,402 rows for every bet, and a restart took minutes to load the pairs.
+    # From the contracts of the sport, each found in nest_members by its index: a join looking each bet up in
+    # nest_members without one reads every row for every bet, and a restart takes minutes to load the pairs.
     for r in conn.execute("""
         SELECT b.*, c.event_id, c.start_time, c.close_time, c.rules, n.pair_id AS nested_id, n.side
         FROM contracts c JOIN nest_members n ON n.venue = c.venue AND n.contract_id = c.contract_id
@@ -455,8 +455,6 @@ def netted(legs):
     until both trades settle. A contract's pairs are the smaller of the
     contracts held on its yes and on its no, and the same id on two venues
     never nets. Only the venues pay them back: paper's books do not net.
-    On 2026-10-11 they were 443.51 on Polymarket US and 29.59 on Kalshi,
-    of the 3,601.57$ open live trades held.
     """
     held = {}
     for venue, contract_id, contracts in legs:

@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS pairs (
 -- The members of the pairs that nest one line of a bet inside a higher one, yes on the lower line and no on the higher,
 -- see catalog/nest.py: the contracts of the two lines on either venue, a line one venue alone lists too. A nested pair is
 -- a pair of its own, current while it has members here, and its sport's rows are written again at each match, after its
--- bets. From 2026-10-12.
+-- bets.
 CREATE TABLE IF NOT EXISTS nest_members (
     pair_id      INTEGER NOT NULL,   -- The nested pair, see pairs.
     venue        TEXT NOT NULL,
@@ -100,13 +100,13 @@ CREATE TABLE IF NOT EXISTS opportunities (
     days_held      REAL,            -- From the peak until the bet pays out, assuming it is held to resolution.
     return_pct     REAL NOT NULL,   -- Net edge over the capital tied up, as a percent.
     annual_pct     REAL,            -- return_pct scaled to a year over days_held, without compounding.
-    min_edge_seconds REAL,          -- The longest unbroken stretch of the episode at config.MIN_EDGE or more. Null before 2026-09-30.
+    min_edge_seconds REAL,          -- The longest unbroken stretch of the episode at config.MIN_EDGE or more. Null on the oldest rows.
     min_edge_size  REAL,            -- Contracts fillable at that edge through all of that stretch.
     min_edge_profit REAL,           -- Net dollars from filling them, at the stretch's thinnest moment.
     take_size      REAL,            -- Contracts one order could have had on the levels at live's least edge or more, at the best moment
-                                    -- the scanner weighed, see Scanner.weigh_take(); at the peak alone to 2026-10-06. Null before 2026-10-05.
+                                    -- the scanner weighed, see Scanner.weigh_take(). Null on older rows.
     take_profit    REAL,            -- Net dollars from filling them.
-    pm_changed     INTEGER          -- 1 when that moment came with a change of the Polymarket US leg's book, 0 otherwise. Null before 2026-10-05.
+    pm_changed     INTEGER          -- 1 when that moment came with a change of the Polymarket US leg's book, 0 otherwise. Null on older rows.
 );
 
 -- Reports read the episodes of a recent window, see tools/summary.py, and this spares them reading every one.
@@ -119,8 +119,8 @@ CREATE TABLE IF NOT EXISTS trades (
     trade          TEXT NOT NULL,   -- The two legs in words.
     signal_ts      TEXT NOT NULL,
     edge           REAL NOT NULL,   -- Net dollars per contract at the signal.
-    quantity       INTEGER NOT NULL,   -- Contracts wanted on each leg: whole until 2026-10-07, to the hundredth live since. SQLite keeps
-                                       -- a fraction in an INTEGER column as it is, as orders.quantity always has.
+    quantity       INTEGER NOT NULL,   -- Contracts wanted on each leg: whole on paper, to the hundredth live. SQLite keeps a
+                                       -- fraction in an INTEGER column as it is, as in orders.quantity.
     yes_venue      TEXT NOT NULL,
     yes_contract   TEXT NOT NULL,
     yes_polarity   TEXT NOT NULL,   -- The side the contract pays on, so settlement knows whether the leg won.
@@ -145,7 +145,7 @@ CREATE TABLE IF NOT EXISTS trades (
     hedge_pnl      REAL NOT NULL,   -- Dollars gained or lost by flattening, after fees.
     status         TEXT NOT NULL,   -- 'sent' while in flight, then 'filled', 'partial', or 'failed'.
     pays_at        TEXT NOT NULL,   -- When the slower leg pays out.
-    in_play        INTEGER          -- 1 for a trade on a game under way at the signal, else 0. Null before 2026-10-05.
+    in_play        INTEGER          -- 1 for a trade on a game under way at the signal, else 0. Null on older rows.
 );
 
 -- The same for the trades of a recent window.
@@ -193,14 +193,13 @@ CREATE TABLE IF NOT EXISTS orders (
                                        -- none, as for the first book on a connection: when the venue last changed the market.
     book_ts        TEXT                -- When that book reached us, by our clock. sent_at less it is how long the market had sent nothing.
 );
--- The brakes and the reports join orders to their trades. Without this SQLite built a throwaway index over every order
--- on each join: on 2026-10-03, with 116,000 orders, the brakes' check took some 150 ms on the instance and held up the
--- orders queued behind it.
+-- The brakes and the reports join orders to their trades. Without this SQLite builds a throwaway index over every order
+-- on each join, and the brakes' check holds up the orders queued behind it.
 CREATE INDEX IF NOT EXISTS idx_orders_trade ON orders (trade_id);
 
--- The in-play test of 2026-10-04 17:49 to 2026-10-05 01:27 UTC: each of the 200 live trades it took while their games were
--- under way, at no more than 5 contracts, and the paper trade on the same signal, of the same size and limits, it is set
--- against. tools/in_play_test.py reports on it. Nothing writes to it any more.
+-- The in-play test: each of the 200 live trades it took while their games were under way, at no more than 5 contracts,
+-- and the paper trade on the same signal, of the same size and limits, it is set against. tools/in_play_test.py reports
+-- on it. Nothing writes to it.
 CREATE TABLE IF NOT EXISTS twins (
     live_trade_id   INTEGER PRIMARY KEY,    -- The live trade, see trades.
     paper_trade_id  INTEGER,                -- Its paper twin, or null when the paper money could not pay for one.

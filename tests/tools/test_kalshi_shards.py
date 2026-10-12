@@ -18,9 +18,9 @@ def test_moves_bring_each_shard_to_its_share_to_the_hundredth_of_a_cent():
     # Even already, or off by less than a cent.
     assert kalshi_shards.moves({0: 20.0, 3: 20.0}, {0: 50, 3: 50}) == []
     assert kalshi_shards.moves({0: 20.004, 3: 20.0}, {0: 50, 3: 50}) == []
-    # Split 90 to 10 from where it stood on 2026-10-01: all but a tenth of the whole moves to football's.
+    # Split 90 to 10: all but a tenth of the whole moves to football's.
     assert kalshi_shards.moves({0: 6.94, 3: 44.83}, {0: 90, 3: 10}) == [(39.653, 3, 0)]
-    # From 80/10/10 as it stood on 2026-10-10 to 80/20: Bitcoin's tenth moves to baseball's.
+    # From 80/10/10 to 80/20: shard 2's tenth moves to baseball's.
     assert kalshi_shards.moves({0: 432.72, 2: 54.09, 3: 54.09}, {0: 80, 3: 20}) == [(54.09, 2, 3)]
 
 

@@ -31,8 +31,8 @@ from db.models import Contract
 
 GATEWAY = "https://gateway.polymarket.us/v1"    # Public catalog of events and markets.
 RACE_DAYS = 2           # The longest a race's event runs, start to end, so that a longer one with a sports data id is a season's award.
-# Seconds between the calls of one results lookup, one an event, so a settlement pass never bursts: Cloudflare answered HTTP 429
-# at about 6 calls a second on 2026-10-11, and the live orders share that limit.
+# Seconds between the calls of one results lookup, one an event, so a settlement pass never bursts: Cloudflare answers HTTP 429
+# at about 6 calls a second, and the live orders share that limit.
 RESULTS_SLEEP = 0.5
 API = "https://api.polymarket.us/v1"            # Signed requests for books and trading.
 API_PATH = "/v1"                                # API's path, which a signed request's signature covers.
@@ -40,15 +40,14 @@ WS_URL = "wss://api.polymarket.us/v1/ws/markets"
 WS_PATH = "/v1/ws/markets"
 WS_CHUNK = 100          # Market slugs per subscription request, the documented maximum.
 WS_SUBSCRIPTIONS = 10   # Subscription requests per connection, however few slugs each carries.
-# What each chunk of slugs subscribes to: the whole book. The trade feed was dropped on 2026-09-30. Trades came about 4% as
-# often as book changes, arrived no sooner than the book with the same time, and can only take quotes away, never add them.
+# What each chunk of slugs subscribes to: the whole book, not the trade feed. Trades come about 4% as often as book changes,
+# arrive no sooner than the book with the same time, and can only take quotes away, never add them.
 WS_TYPE = "SUBSCRIPTION_TYPE_MARKET_DATA"
 WS_FULL = "max subscriptions per connection reached"    # The error refusing a request past WS_SUBSCRIPTIONS.
 WS_DEBOUNCE = False     # Whether to ask the feed to batch updates. Batching cuts bandwidth by a third, but it can hold our view of the
-                        # book behind the venue's: on the first live game, 2026-09-28, only 1 of 11 orders opening a trade here filled.
+                        # book behind the venue's, so orders opening a trade here miss.
 OPEN_STATE = "MARKET_STATE_OPEN"    # The state a book message gives a market that trades. Others are suspended, halted, preopen,
-                                    # expired, terminated, and match_and_close_auction. On 2026-10-07, 109 of 3,000 markets the
-                                    # recorder followed came expired.
+                                    # expired, terminated, and match_and_close_auction.
 KEY_ID_FILE = DATA_DIR / "polymarket_us_key_id.txt"
 SECRET_KEY_FILE = DATA_DIR / "polymarket_us_secret_key.txt"
 
@@ -173,9 +172,8 @@ def results(event_slugs):
     market's yes, paid, from 0 to 1: the long side's price once the market
     has resolved, 1 when it won and 0 when it lost, and part of a dollar
     when the rules pay one, as the last fair price of 0.41 for a drawn CS2
-    match on 2026-10-09, or a share of the dollar for a tie. Markets not yet
-    resolved are left out. Each event costs a call, with RESULTS_SLEEP
-    between them.
+    match, or a share of the dollar for a tie. Markets not yet resolved are
+    left out. Each event costs a call, with RESULTS_SLEEP between them.
     """
     out = {}
     for i, slug in enumerate(sorted(set(event_slugs))):

@@ -49,9 +49,8 @@ RESULTS_BY_EVENT = {"kalshi": False, "polymarket_us": True}     # Whether a venu
 def written(paid):
     """
     How a contract resolved, as a Settlement stores it, from what a yes
-    contract paid: 'yes' for a dollar and 'no' for nothing, as every result
-    was stored before 2026-10-11, and part of a dollar as the decimal it
-    paid, '0.6' for 60 cents.
+    contract paid: 'yes' for a dollar and 'no' for nothing, and part of a
+    dollar as the decimal it paid, '0.6' for 60 cents.
     """
     if paid in (0, 1):
         return "yes" if paid == 1 else "no"
