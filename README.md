@@ -1676,11 +1676,10 @@ through an index on `nest_members` (`idx_nest_members_contract`), and the
 contracts to record by the paired query as before with the nested one
 beside it: on a copy of that day's database the pairs loaded in 5.95
 seconds against 5.04 before nesting, and the contracts to record in 15.7
-against 13.9. Whether
-venues misprice one line against another often enough to trade is what
-the episodes will show: an edge needs one venue's lower line to cost
-less than the other's higher line pays, while the higher line should
-cost less by the chance the number lands between them.
+against 13.9. Whether venues misprice one line against another often
+enough to trade is what the episodes will show: an edge needs one venue's
+lower line to cost less than the other's higher line pays, while the
+higher line should cost less by the chance the number lands between them.
 
 **Kalshi's leg giving up edge.** From October 6 15:34 UTC to October 11
 23:00, live made 7,073 trades on games under way, locking in 129.00$ and
