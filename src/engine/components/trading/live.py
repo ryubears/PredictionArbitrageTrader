@@ -81,6 +81,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from api import kalshi, orders, polymarket_us
 from common import jsonutil
+from common.paths import NAME
 from common.periodic import Periodic
 from common.timeutil import at_seconds, now_iso
 from common.venues import VENUES, is_maintenance
@@ -135,7 +136,7 @@ class LiveExecutor(Executor):
         where = venue if part is None else f"{venue} shard {part}"
         if dollars < config.LIVE_LOW_CASH and (venue, part) not in self.low:
             self.low.add((venue, part))
-            subject = f"SportsArb live {where} cash low: {dollars:,.2f}$"
+            subject = f"{NAME} live {where} cash low: {dollars:,.2f}$"
             body = (f"Live cash on {where} is {dollars:,.2f}$, under {config.LIVE_LOW_CASH:,.2f}$. Trades there go on as far as it "
                     f"pays for, so add money to the venue to keep trading"
                     + (", or move some to the shard with python3 -m tools.kalshi_shards." if part is not None else "."))

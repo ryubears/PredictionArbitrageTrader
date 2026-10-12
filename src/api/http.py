@@ -15,8 +15,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from common.paths import NAME
 
-USER_AGENT = "SportsArb research (github.com/ryubears/SportsArb)"
+USER_AGENT = f"{NAME} research (github.com/ryubears/{NAME})"
 SEND_TIMEOUT = 10       # Seconds a trading call may take before its outcome is unknown.
 IDLE_SECONDS = 20       # A kept connection idle longer than this is closed rather than reused, before the server closes it under us.
 

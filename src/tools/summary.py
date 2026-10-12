@@ -54,6 +54,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))     # src, so the script runs from any folder.
+from common.paths import NAME
 from common.stats import quantile
 from common.timeutil import at_seconds, days_between, epoch, now_iso, shift
 from common.venues import is_maintenance
@@ -615,7 +616,7 @@ def print_live_money(balances):
 # MAIN
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Summarize the SportsArb database.")
+    ap = argparse.ArgumentParser(description=f"Summarize the {NAME} database.")
     ap.add_argument("--hours", type=int, default=24, help="size of the recent window for feed drops, opportunities, and trades")
     ap.add_argument("--mode", choices=sorted(MODES), default="all",
                     help="the trades to show: live, paper, or all, the default")

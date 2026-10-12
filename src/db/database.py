@@ -1,5 +1,5 @@
 """
-SQLite storage for SportsArb.
+SQLite storage for PredictionArbitrageTrader.
 
 One database file holds every table, which makes it easy to open in any
 SQLite browser. The tables follow the pipeline in order.
@@ -31,7 +31,7 @@ from db import migrations, schema
 from db.models import Alert, Bet, Gap, Ledger, Opportunity, Order, Settlement, Trade
 from pathlib import Path
 
-DB_PATH = DATA_DIR / "sportsarb.sqlite"
+DB_PATH = DATA_DIR / "sportsarb.sqlite"     # Named for the project's first name, SportsArb, which the instance's database keeps.
 
 # Model fields that are read from other tables or set by the database, so they are never written.
 NOT_STORED = {"id", "label", "starts_at"}

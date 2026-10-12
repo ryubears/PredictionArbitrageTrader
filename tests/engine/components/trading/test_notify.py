@@ -16,12 +16,12 @@ def test_an_alert_without_email_settings_is_still_logged_and_stored(tmp_path, mo
     notifier = notify.Notifier(conn, logs.append, sender=lambda *args: pytest.fail("nothing to send with"))
 
     async def scenario():
-        notifier.send("halt", "SportsArb live trading halted", "why")      # From inside the loop the email goes out in the background.
+        notifier.send("halt", "PredictionArbitrageTrader live trading halted", "why")      # From inside the loop the email goes out in the background.
         await asyncio.gather(*notifier.tasks)
     asyncio.run(scenario())
     (stored,) = [dict(r) for r in conn.execute("SELECT kind, sent_at, error FROM alerts")]
     assert stored == {"kind": "halt", "sent_at": None, "error": "no email settings in missing.json"}
-    assert logs == ["alert: SportsArb live trading halted", "alert 1 was not emailed: no email settings in missing.json"]
+    assert logs == ["alert: PredictionArbitrageTrader live trading halted", "alert 1 was not emailed: no email settings in missing.json"]
 
 
 def test_an_email_upgrades_to_tls_logs_in_and_sends(monkeypatch):
@@ -77,9 +77,9 @@ def test_the_attestation_watch_emails_before_the_day_it_lapses_and_once_it_has_e
     check("2026-11-03T15:00:00+00:00")
     alerts = [dict(r) for r in conn.execute("SELECT ts, kind, subject, body FROM alerts ORDER BY id")]
     assert [(a["ts"], a["kind"], a["subject"]) for a in alerts] == [
-        ("2026-10-03T15:00:00+00:00", "attestation", "SportsArb: renew the Kalshi key's location attestation before 2026-10-05 14:22 UTC"),
-        ("2026-10-05T15:00:00+00:00", "attestation", "SportsArb: the Kalshi key's location attestation lapsed at 2026-10-05 14:22 UTC"),
-        ("2026-11-03T15:00:00+00:00", "attestation", "SportsArb: renew the Kalshi key's location attestation before 2026-11-05 14:22 UTC")]
+        ("2026-10-03T15:00:00+00:00", "attestation", "PredictionArbitrageTrader: renew the Kalshi key's location attestation before 2026-10-05 14:22 UTC"),
+        ("2026-10-05T15:00:00+00:00", "attestation", "PredictionArbitrageTrader: the Kalshi key's location attestation lapsed at 2026-10-05 14:22 UTC"),
+        ("2026-11-03T15:00:00+00:00", "attestation", "PredictionArbitrageTrader: renew the Kalshi key's location attestation before 2026-11-05 14:22 UTC")]
     assert "in 47 hours. Renew it on Kalshi before then." in alerts[0]["body"]
 
 

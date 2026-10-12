@@ -243,7 +243,7 @@ def test_after_a_loss_halt_flattening_goes_on_until_its_orders_fail(tmp_path):
     assert len(venues.orders) == 7 and list(ex.exposed) == [1]          # Nothing more is sent.
     assert "; HALTED, no orders at all: polymarket_us refused 3 orders in a row" in ex.summary()
     (_, first, halted), (_, second, stopped) = notifier.sent
-    assert (first, second) == ("SportsArb live trading halted", "SportsArb live flattening stopped")
+    assert (first, second) == ("PredictionArbitrageTrader live trading halted", "PredictionArbitrageTrader live flattening stopped")
     assert "Exposed trades are still flattened." in halted and "No more orders are sent, flattening included." in stopped
 
 
@@ -410,8 +410,8 @@ def test_trades_spend_all_the_cash_and_a_venue_or_kalshi_shard_running_low_email
     ex.tick(NOW)
     # Once each: Kalshi's shard 0, whose 8 dollars less the 7.9994 bought is 0.0006, and Polymarket US, 8 less 7.659. Shards 2
     # and 3 have plenty.
-    assert [(kind, subject) for kind, subject, _ in notifier.sent] == [("low_cash", "SportsArb live kalshi shard 0 cash low: 0.00$"),
-                                                                        ("low_cash", "SportsArb live polymarket_us cash low: 0.34$")]
+    assert [(kind, subject) for kind, subject, _ in notifier.sent] == [("low_cash", "PredictionArbitrageTrader live kalshi shard 0 cash low: 0.00$"),
+                                                                        ("low_cash", "PredictionArbitrageTrader live polymarket_us cash low: 0.34$")]
     assert "move some to the shard with python3 -m tools.kalshi_shards" in notifier.sent[0][2]
     cash.shard_read[("kalshi", 0)] = 20.0                               # A payout arrives.
     ex.tick(NOW)
@@ -419,8 +419,8 @@ def test_trades_spend_all_the_cash_and_a_venue_or_kalshi_shard_running_low_email
     cash.shard_read[("kalshi", 0)] = 4.0
     cash.shard_read[("kalshi", 3)] = 1.0
     ex.tick(NOW)
-    assert [subject for _, subject, _ in notifier.sent][-2:] == ["SportsArb live kalshi shard 0 cash low: -4.00$",     # 4 read, less 7.9994.
-                                                                  "SportsArb live kalshi shard 3 cash low: 1.00$"]
+    assert [subject for _, subject, _ in notifier.sent][-2:] == ["PredictionArbitrageTrader live kalshi shard 0 cash low: -4.00$",     # 4 read, less 7.9994.
+                                                                  "PredictionArbitrageTrader live kalshi shard 3 cash low: 1.00$"]
 
 
 def test_polymarket_us_goes_first_and_kalshi_only_once_it_has_answered(tmp_path):
