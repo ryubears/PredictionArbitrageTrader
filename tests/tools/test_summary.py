@@ -381,6 +381,20 @@ def test_live_open_capital_leaves_out_what_venue_netting_already_paid_back(tmp_p
                           "  expected to return 1.23$ in profit, 5.8% on capital, 2,153.5% a year"]
 
 
+def test_the_net_adds_the_second_dollar_of_nested_trades_both_of_whose_legs_paid(tmp_path, monkeypatch, capsys):
+    def fill(conn):
+        for payouts in ((10.0, 10.0), (10.0, 0.0)):          # A nested trade landing between its lines, and one that did not.
+            t = held_trade(conn, held=(10, 10), cost=(4.5, 4.7), profit=0.80)
+            s = Settlement(t.id, INSIDE, mode="live")
+            s.record("yes", "yes", payouts[0], INSIDE)
+            s.record("no", "no" if payouts[1] else "yes", payouts[1], INSIDE)
+            database.insert_settlement(conn, s)
+    out = report(tmp_path, monkeypatch, capsys, fill)
+    assert ("\nlive futures trades: 2 in all, 0 in the last 12 hours\n"
+            "  net 10.00$: 0.00$ locked in and hedged on the trades opened, 0.00$ on the exposed contracts of 0 trades settled, "
+            "10.00$ more on 1 nested trades both of whose legs paid\n") in out
+
+
 def test_the_net_adds_what_exposed_contracts_made_or_lost_at_settlement_in_the_window(tmp_path, monkeypatch, capsys):
     def fill(conn):
         held_trade(conn, signal=INSIDE, profit=0.30, hedge=-0.05)      # Opened in the window and still open.

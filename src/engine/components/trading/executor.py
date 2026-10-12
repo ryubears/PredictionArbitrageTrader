@@ -97,6 +97,7 @@ money/settle.py's job.
 import asyncio
 import dataclasses
 import math
+from collections import Counter
 from dataclasses import dataclass
 from api.orders import exact, size as order_size
 from common.log import on_failure
@@ -186,6 +187,7 @@ class Executor:
         self.unsold = {}            # Trade id maps to when, in seconds since 1970, it may be flattened again after a sale that filled nothing.
         self.set_aside = {}         # Trade id maps to why no more orders are sent for it, which only live trading does.
         self.leads = {}             # Trade id maps to the venue whose leg goes first, for a trade whose legs are not sent at once.
+        self.busy = Counter()       # (venue, contract id) maps to the trades in flight with a leg on it, see signal().
         self.waiting = set()        # Pairs whose edge waited for a book to catch up since the last summary, see confirm_wait().
         self.held = set()           # Pairs whose edge was held until it had lasted since the last summary, see hold().
         self.recheck = None         # Called with (pair id, seconds) when an edge waits, to price the pair again once the wait ends.
@@ -734,6 +736,11 @@ class Executor:
         edge, while the legs are sized from the levels that keep the least
         edge, see quantity_for(). The cost is reserved here, before anything
         is awaited, so a second signal in the same moment sees what is left.
+        A signal with a leg on a contract that a trade still in flight has a
+        leg on is turned down, see busy, from 2026-10-12: a contract may be in
+        a pair and in the nested pairs of its line, see catalog/nest.py, and
+        two trades sent on it at once would race for the same levels, the
+        loser left to sell its other leg back.
         """
         least = self.min_edge(pair, yes, no, now)
         if edge < least:
@@ -752,7 +759,7 @@ class Executor:
             return self.put_off(pair["id"], wait, self.waiting)
         legs = [Leg(side, m["venue"], m["contract_id"], m["polarity"], fee_info=fee_infos[(m["venue"], m["contract_id"])])
                 for side, m in (("yes", yes), ("no", no))]
-        if not all(self.trading(leg, now) for leg in legs):
+        if not all(self.trading(leg, now) for leg in legs) or any(self.busy[leg.key] for leg in legs):
             return False
         quantity = self.quantity_for(legs, least, self.most(pair, yes, no, now))
         if quantity < self.fewest() - 1e-9:
@@ -770,10 +777,21 @@ class Executor:
         lead = self.lead(yes, no, under_way)
         if lead:
             self.leads[trade.id] = lead
+        self.busy.update(leg.key for leg in legs)
         task = self.spawn(self.run_trade(trade, legs))
+        task.add_done_callback(lambda _: self.free(legs))
         if pair.get("game_date") is None:
             task.add_done_callback(lambda done: self.again(trade, done))
         return True
+
+    def free(self, legs):
+        """
+        Once a trade on legs is done, its legs' contracts are free for other trades, see signal().
+        """
+        for leg in legs:
+            self.busy[leg.key] -= 1
+            if self.busy[leg.key] <= 0:
+                del self.busy[leg.key]
 
     def tick(self, now):
         """

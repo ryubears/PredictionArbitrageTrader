@@ -6,6 +6,7 @@ import asyncio
 import dataclasses
 import pytest
 from common.timeutil import days_between, epoch
+from catalog import match, nest
 from db import database
 from db.models import Bet, Pair, Contract, Opportunity, Book
 from engine.components.market import record, scan
@@ -135,6 +136,32 @@ def test_an_episode_never_at_the_minimum_edge_has_no_stretch(tmp_path):
                   Book("kalshi", "k", "2026-09-19T12:00:01+00:00", [[0.50, 100]], [[0.51, 100]]),     # 1 cent.
                   Book("kalshi", "k", "2026-09-19T12:01:01+00:00", [[0.49, 100]], [[0.50, 100]])])
     assert stretches(conn) == [(0.0, 0.0, 0.0)]
+
+
+def test_a_nested_pair_finds_an_edge_neither_of_its_lines_has(tmp_path):
+    # Atlanta covering 4.5 and 6.5 on both venues. Each line is priced right across the venues, but Kalshi bids 0.55 for
+    # covering 6.5 where Polymarket US offers covering 4.5, which pays whenever 6.5 does, at 0.49.
+    members = [member(v, f"{v[0]}{line}") for line in (4.5, 6.5) for v in ("kalshi", "polymarket_us")]
+    conn = make_db(tmp_path, members)
+    bets = [Bet(m["venue"], m["contract_id"], "spread", 2027, "2026-09-20", "CAR", "ATL", "ATL", float(m["contract_id"][1:]), "yes")
+            for m in members]
+    database.replace_bets(conn, "nfl", bets)
+    rows = [dict(dataclasses.asdict(b), close_time=None) for b in bets]
+    pairs, _ = match.match(rows, "nfl")
+    database.replace_pairs(conn, "nfl", pairs, T0)
+    database.replace_nests(conn, "nfl", nest.nest(rows, "nfl"), T0)
+    at = "2026-09-19T12:00:%02d+00:00"
+    episodes = replay(conn, [Book("polymarket_us", "p4.5", at % 0, [[0.48, 100]], [[0.49, 100]]),
+                             Book("kalshi", "k4.5", at % 0, [[0.47, 100]], [[0.50, 100]]),
+                             Book("polymarket_us", "p6.5", at % 0, [[0.54, 100]], [[0.56, 100]]),
+                             Book("kalshi", "k6.5", at % 1, [[0.55, 100]], [[0.57, 100]]),
+                             Book("kalshi", "k6.5", at % 3, [[0.45, 100]], [[0.57, 100]])])
+    labels = dict(conn.execute("SELECT id, label FROM pairs"))
+    assert [labels[o.pair_id] for o in episodes] == ["nfl spread 2026-09-20 CAR@ATL ATL 4.5 nested 6.5"]
+    o = episodes[0]
+    # From the start yes on Kalshi's 4.5 at 0.50 with no on Polymarket US's 6.5 at 0.46 locks in 4 cents. Once Kalshi bids
+    # 0.55 for 6.5, yes on Polymarket US's 4.5 at 0.49 with no on Kalshi's 6.5 locks in 6, two dollars on a 5 or 6 point win.
+    assert (o.yes_contract, o.no_contract, o.peak_edge, o.seconds) == ("p4.5", "k6.5", pytest.approx(0.06), 3)
 
 
 def test_an_episode_keeps_what_one_order_could_have_had_on_the_levels_live_takes(tmp_path):

@@ -3,6 +3,7 @@ Round trip every table through the database module.
 """
 
 import pytest
+from catalog import nest
 from db import database, schema
 from db.models import Bet, Contract, Gap, Opportunity, Pair
 
@@ -48,6 +49,31 @@ def test_bets_pairs_and_targets(tmp_path):
     assert targets == {"polymarket_us": ["pm"], "kalshi": ["k"]}
     closed = database.load_recording_targets(conn, "nfl", "2028-01-01T00:00:00+00:00", "2028-01-08T00:00:00+00:00", venues, "2027-12-31T19:00:00+00:00")
     assert closed == {"polymarket_us": [], "kalshi": []}
+
+
+def test_nested_pairs_load_with_each_member_holding_its_own_side_and_are_recorded_a_line_one_venue_lists_too(tmp_path):
+    conn = database.connect(tmp_path / "t.sqlite")
+    ids = [("polymarket_us", "p9.5"), ("kalshi", "k9.5"), ("kalshi", "k10.5")]     # Polymarket US lists no 10.5.
+    database.upsert_contracts(conn, [contract(v, cid) for v, cid in ids], "2026-01-01T00:00:00+00:00")
+    bets = [Bet(v, cid, "season_wins", 2027, None, None, None, "SEA", float(cid[1:]), "yes") for v, cid in ids]
+    database.replace_bets(conn, "nfl", bets)
+    low = Pair("nfl season_wins 2027 SEA 9.5", "season_wins", 2027, None, None, None, "SEA", 9.5, bets[:2], [], sport="nfl")
+    database.replace_pairs(conn, "nfl", [low], "2026-01-01T00:00:00+00:00")
+    nested = nest.nest(database.load_bets(conn, "nfl"), "nfl")
+    database.replace_nests(conn, "nfl", nested, "2026-01-01T00:00:00+00:00")
+    pairs = database.load_pairs(conn, "nfl")
+    p = pairs[nested[0][0].id]
+    assert (p["label"], p["kind"], p["contracts"]) == ("nfl season_wins 2027 SEA 9.5 nested 10.5", "season_wins_nested", 3)
+    assert sorted((m["contract_id"], m["side"]) for m in p["members"]) == [("k10.5", "no"), ("k9.5", "yes"), ("p9.5", "yes")]
+    assert sorted(m["contract_id"] for m in pairs[low.id]["members"]) == ["k9.5", "p9.5"]
+    assert all("side" not in m for m in pairs[low.id]["members"])     # The line's own pair holds either side, as ever.
+    targets = lambda: database.load_recording_targets(conn, "nfl", "2026-06-01T00:00:00+00:00", "2026-06-08T00:00:00+00:00",
+                                                      ["kalshi", "polymarket_us"], "2026-05-31T19:00:00+00:00")
+    assert sorted(targets()["kalshi"]) == ["k10.5", "k9.5"]           # Kalshi's 10.5 is recorded for the nested pair alone.
+    # The next match nests nothing: the nested pair is gone, and Kalshi's 10.5 is not recorded any more.
+    database.replace_nests(conn, "nfl", [], "2026-01-02T00:00:00+00:00")
+    assert list(database.load_pairs(conn, "nfl")) == [low.id] and targets()["kalshi"] == ["k9.5"]
+    assert conn.execute("SELECT COUNT(*) FROM nest_members").fetchone()[0] == 0
 
 
 def test_game_contracts_stay_targets_through_the_game(tmp_path):

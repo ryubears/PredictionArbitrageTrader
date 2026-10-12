@@ -24,7 +24,7 @@ def test_refresh_fetches_classifies_and_pairs(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline.fetch, "fetch_contracts", lambda venue, sport: canned_by_venue[venue])
     logs = []
     summary = pipeline.refresh("nfl", log=logs.append, db_path=tmp_path / "t.sqlite")
-    assert summary == "kalshi 1 contracts, polymarket_us 1 contracts, 2 bets, 1 pairs"
+    assert summary == "kalshi 1 contracts, polymarket_us 1 contracts, 2 bets, 1 pairs, 0 nested"
     assert [line.split(" in ")[0] for line in logs] == ["fetched 1 nfl contracts from kalshi", "fetched 1 nfl contracts from polymarket_us"]
     with database.connect(tmp_path / "t.sqlite") as conn:
         assert [p["label"] for p in database.load_pairs(conn, "nfl").values()] == ["nfl champion 2027 KC"]

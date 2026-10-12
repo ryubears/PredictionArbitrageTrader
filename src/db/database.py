@@ -163,17 +163,21 @@ def event_ids(conn, venue, contract_ids):
 
 # Every paired game with its kickoff, the latest start time any of its contracts gives, which is Polymarket US's since
 # Kalshi gives none.
-GAMES = """
+# The contracts of every current pair, as (venue, contract_id, pair_id): a pair's bets, and a nested pair's members.
+MEMBERS = """
+    SELECT venue, contract_id, pair_id FROM bets WHERE pair_id IS NOT NULL
+    UNION SELECT venue, contract_id, pair_id FROM nest_members"""
+GAMES = f"""
     SELECT p.sport, p.game_date, p.team_a, p.team_b, MAX(c.start_time) AS kickoff
-    FROM pairs p JOIN bets b ON b.pair_id = p.id JOIN contracts c ON c.venue = b.venue AND c.contract_id = b.contract_id
+    FROM pairs p JOIN ({MEMBERS}) m ON m.pair_id = p.id JOIN contracts c ON c.venue = m.venue AND c.contract_id = m.contract_id
     WHERE p.game_date IS NOT NULL GROUP BY 1, 2, 3, 4"""
 
 
 def load_recording_targets(conn, sport, now, horizon, venues, game_started_after):
     """
     The contracts to record right now, as {venue: [contract_id, ...]}: every
-    contract in a pair on a game no later than the horizon's date, for as
-    long as it can trade. A game's contracts on both venues are recorded
+    contract in a pair, or in a nested pair, see catalog/nest.py, on a game
+    no later than the horizon's date, for as long as it can trade. A game's contracts on both venues are recorded
     while the game may still be in play, meaning it kicked off after
     game_started_after, whatever their close times say, with the kickoff
     from GAMES. Polymarket US leaves a game's contracts open two
@@ -186,13 +190,13 @@ def load_recording_targets(conn, sport, now, horizon, venues, game_started_after
     for venue in venues:
         rows = conn.execute(f"""
             WITH games AS ({GAMES})
-            SELECT c.contract_id FROM contracts c
-            JOIN bets b ON b.venue = c.venue AND b.contract_id = c.contract_id
-            JOIN pairs p ON p.id = b.pair_id
+            SELECT DISTINCT c.contract_id FROM contracts c
+            JOIN ({MEMBERS}) m ON m.venue = c.venue AND m.contract_id = c.contract_id
+            JOIN pairs p ON p.id = m.pair_id
             LEFT JOIN games g ON g.sport = p.sport AND g.game_date = p.game_date AND g.team_a = p.team_a AND g.team_b = p.team_b
             WHERE c.venue = ? AND c.sport = ?
               AND (g.kickoff > ? OR (g.kickoff IS NULL AND (c.close_time IS NULL OR c.close_time > ?)))
-              AND (b.game_date IS NULL OR b.game_date <= ?)
+              AND (p.game_date IS NULL OR p.game_date <= ?)
         """, (venue, sport, game_started_after, now, horizon[:10]))
         targets[venue] = [r[0] for r in rows]
     return targets
@@ -242,19 +246,43 @@ def replace_pairs(conn, sport, pairs, matched_at):
             (SELECT venue, contract_id FROM contracts WHERE sport = ?)
     """, (sport,))
     for p in pairs:
-        conn.execute("""
-            INSERT INTO pairs (sport, label, kind, season, game_date, team_a, team_b, subject, line, venues, contracts, flags, matched_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT (label) DO UPDATE SET kind = excluded.kind, season = excluded.season, game_date = excluded.game_date,
-                team_a = excluded.team_a, team_b = excluded.team_b, subject = excluded.subject, line = excluded.line,
-                venues = excluded.venues, contracts = excluded.contracts, flags = excluded.flags, matched_at = excluded.matched_at
-        """, (p.sport, p.label, p.kind, p.season, p.game_date, p.team_a, p.team_b, p.subject, p.line,
-              ",".join(p.venues), len(p.members), jsonutil.dump(p.flags), matched_at))
-        p.id = conn.execute("SELECT id FROM pairs WHERE label = ?", (p.label,)).fetchone()[0]
+        upsert_pair(conn, p, matched_at)
         for m in p.members:
             m.pair_id = p.id
     conn.executemany("UPDATE bets SET pair_id = ? WHERE venue = ? AND contract_id = ?",
                      [(p.id, m.venue, m.contract_id) for p in pairs for m in p.members])
+    conn.commit()
+
+
+def upsert_pair(conn, p, matched_at):
+    """
+    Store a Pair, or update the one stored under its label, and set its id.
+    """
+    conn.execute("""
+        INSERT INTO pairs (sport, label, kind, season, game_date, team_a, team_b, subject, line, venues, contracts, flags, matched_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT (label) DO UPDATE SET kind = excluded.kind, season = excluded.season, game_date = excluded.game_date,
+            team_a = excluded.team_a, team_b = excluded.team_b, subject = excluded.subject, line = excluded.line,
+            venues = excluded.venues, contracts = excluded.contracts, flags = excluded.flags, matched_at = excluded.matched_at
+    """, (p.sport, p.label, p.kind, p.season, p.game_date, p.team_a, p.team_b, p.subject, p.line,
+          ",".join(p.venues), len(p.members), jsonutil.dump(p.flags), matched_at))
+    p.id = conn.execute("SELECT id FROM pairs WHERE label = ?", (p.label,)).fetchone()[0]
+
+
+def replace_nests(conn, sport, nests, matched_at):
+    """
+    Store a sport's nested pairs, as catalog/nest.py gives them, (nested
+    Pair, lower line's bet rows, higher line's bet rows), each in the pairs
+    table, keeping its id by its label, and their members in nest_members
+    in place of the last match's, the lower line's supplying the yes and the
+    higher line's the no.
+    """
+    for pair, _, _ in nests:
+        upsert_pair(conn, pair, matched_at)
+    conn.execute("DELETE FROM nest_members WHERE pair_id IN (SELECT id FROM pairs WHERE sport = ?)", (sport,))
+    conn.executemany("INSERT OR IGNORE INTO nest_members (pair_id, venue, contract_id, side) VALUES (?, ?, ?, ?)",
+                     [(pair.id, b["venue"], b["contract_id"], side) for pair, wide, narrow in nests
+                      for side, rows in (("yes", wide), ("no", narrow)) for b in rows])
     conn.commit()
 
 
@@ -265,15 +293,25 @@ def load_pairs(conn, sport):
     Each member carries a digest of its contract's rules, or None without
     any, so two contracts that settle alike can be told apart from two
     that do not without holding every rule's text, see pricing.same_rules().
+    A nested pair, see catalog/nest.py, has its members from nest_members,
+    each with the side it supplies, 'yes' for the lower line's and 'no' for
+    the higher's, one copy of a contract a side, shared by the nested pairs
+    it is in.
     """
-    members = {}
+    members, sided, paired = {}, {}, set()
     for r in conn.execute("""
-        SELECT b.*, c.event_id, c.start_time, c.close_time, c.rules FROM bets b JOIN contracts c USING (venue, contract_id)
-        WHERE c.sport = ? AND b.pair_id IS NOT NULL""", (sport,)):
+        SELECT b.*, c.event_id, c.start_time, c.close_time, c.rules, n.pair_id AS nested_id, n.side
+        FROM bets b JOIN contracts c USING (venue, contract_id) LEFT JOIN nest_members n USING (venue, contract_id)
+        WHERE c.sport = ? AND (b.pair_id IS NOT NULL OR n.pair_id IS NOT NULL)""", (sport,)):
         member = dict(r)
-        rules = member.pop("rules")
+        rules, nested_id, side = member.pop("rules"), member.pop("nested_id"), member.pop("side")
         member["rules_digest"] = hashlib.sha256(rules.encode()).hexdigest() if rules else None
-        members.setdefault(r["pair_id"], []).append(member)
+        key = (r["venue"], r["contract_id"])
+        if r["pair_id"] is not None and key not in paired:     # A row for each nested pair the contract is in too.
+            paired.add(key)
+            members.setdefault(r["pair_id"], []).append(member)
+        if nested_id is not None:
+            members.setdefault(nested_id, []).append(sided.setdefault((r["venue"], r["contract_id"], side), dict(member, side=side)))
     return {r["id"]: dict(r, members=members[r["id"]]) for r in conn.execute("SELECT * FROM pairs") if r["id"] in members}
 
 

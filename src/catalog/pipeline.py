@@ -1,6 +1,7 @@
 """
 Refresh the catalog. Fetch every venue, classify the contracts into bets,
-and pair them across venues, in one call.
+pair them across venues, and nest each bet's lines, see nest.py, in one
+call.
 
 The live process runs this on a timer so new games enter the pairs while
 it runs. The same steps are available one at a time as fetch.py,
@@ -11,9 +12,9 @@ Run with:
 """
 
 import argparse
-from catalog import fetch, match
+from catalog import fetch, match, nest
 from catalog.classify import classify
-from common.timeutil import now_iso
+from common.timeutil import now_iso, shift
 from common.venues import VENUES
 from db import database
 
@@ -27,9 +28,14 @@ def refresh(sport, log=print, db_path=None):
         counts = fetch.fetch_and_store(sport, VENUES, conn, log)
         bets, _ = classify.classify_all(database.load_contracts(conn, sport=sport))
         database.replace_bets(conn, sport, bets)
-        pairs, _ = match.match(database.load_bets(conn, sport), sport)
-        database.replace_pairs(conn, sport, pairs, now_iso())
-    return ", ".join([f"{venue} {n} contracts" for venue, n in counts.items()] + [f"{len(bets)} bets, {len(pairs)} pairs"])
+        rows = database.load_bets(conn, sport)
+        pairs, _ = match.match(rows, sport)
+        matched_at = now_iso()
+        database.replace_pairs(conn, sport, pairs, matched_at)
+        nests = nest.nest(rows, sport, since=shift(matched_at, days=-1)[:10])
+        database.replace_nests(conn, sport, nests, matched_at)
+    return ", ".join([f"{venue} {n} contracts" for venue, n in counts.items()]
+                     + [f"{len(bets)} bets, {len(pairs)} pairs, {len(nests)} nested"])
 
 
 # MAIN

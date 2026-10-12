@@ -228,3 +228,19 @@ def test_fractional_results_pay_part_of_a_dollar_on_each_side(tmp_path):
     assert (row["no_result"], row["no_payout"]) == ("0.6", pytest.approx(50 * 0.4))
     assert cash.amounts == pytest.approx({"polymarket_us": 10000 + 20.5, "kalshi": 10000 + 20})
     assert logs == [f"paper settled {trade.label}: polymarket_us yes 0.41 pays 20.50$, kalshi no 0.6 pays 20.00$, realized -5.50$"]
+
+
+def test_a_nested_trade_landing_between_its_lines_is_paid_on_both_legs(tmp_path):
+    # Yes on the lower line through Polymarket US's contract and no on the higher line through Kalshi's, see catalog/nest.py:
+    # a number between the lines resolves the first yes and the second no, and each leg is paid by its own contract.
+    conn = database.connect(tmp_path / "t.sqlite")
+    cash = PaperBalances(conn)
+    logs = []
+    s = settle.Settler(conn, cash, logs.append)
+    trade = filled_trade(conn)
+    settled(s, "2026-09-20T21:05:00+00:00",
+            {("polymarket_us", "pm"): (1.0, "2026-09-20T20:10:00+00:00"), ("kalshi", "k"): (0.0, "2026-09-20T20:09:00+00:00")})
+    row = conn.execute("SELECT * FROM settlements").fetchone()
+    assert (row["yes_result"], row["yes_payout"], row["no_result"], row["no_payout"]) == ("yes", 50, "no", 50)
+    assert cash.amounts == pytest.approx({"polymarket_us": 10000 + 50, "kalshi": 10000 + 50})
+    assert logs[-1].endswith("realized +54.00$")                       # The 4.00$ locked in and a second dollar a pair.

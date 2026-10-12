@@ -19,7 +19,8 @@ in, overall, by sport and kind, and the largest, and how long the edge
 stayed at config.MIN_EDGE or more, in seconds to the thousandth. A
 market's trades show their net for the window, what the trades opened in
 it locked in and hedged with what exposed contracts made or lost settling
-in it, then by kind for the window, the largest, each open trade opened
+in it and the second dollar a pair of the nested trades both of whose
+legs paid, see catalog/nest.py, then by kind for the window, the largest, each open trade opened
 in it, the trades by outcome, and last the open trades in a few lines:
 how many, how many of them opened in the last hour, day, and week and the
 capital those hold, the capital they all hold, less what netting on the
@@ -434,6 +435,21 @@ def exposure_settled(conn, since, mode, where, params):
         WHERE s.mode = ? AND s.settled_at >= ? AND t.yes_held != t.no_held{where}""", (mode, since) + params)[0]
 
 
+def both_paid(conn, since, mode, where, params):
+    """
+    What the balanced trades of one mode that settled in the window were
+    paid beyond their locked-in profit, as (trades, dollars): a nested
+    trade's two legs both pay when the number lands between its lines, a
+    second dollar a pair, see catalog/nest.py, where any other balanced
+    trade is paid one dollar a pair, its profit to the cent.
+    """
+    return query_rows(conn, f"""
+        SELECT COUNT(*), COALESCE(SUM(COALESCE(s.yes_payout, 0) + COALESCE(s.no_payout, 0) - t.yes_cost - t.no_cost - t.profit), 0)
+        FROM settlements s JOIN trades t ON t.id = s.trade_id JOIN pairs p ON p.id = t.pair_id
+        WHERE s.mode = ? AND s.settled_at >= ? AND t.yes_held = t.no_held
+          AND COALESCE(s.yes_payout, 0) + COALESCE(s.no_payout, 0) > t.yes_held + 0.005{where}""", (mode, since) + params)[0]
+
+
 def print_market_trades(conn, since, hours, mode, market, sports, now):
     """
     One mode's trades in one market: how many, the net of the window, by
@@ -442,7 +458,8 @@ def print_market_trades(conn, since, hours, mode, market, sports, now):
     trades opened in the window locked in and made or lost flattening, the
     tables' net, with what exposed contracts made or lost at settlement in
     it, see exposure_settled(), so each trade counts its profit when it
-    opens and its exposure when it settles. Until 2026-10-12 live's orders
+    opens and its exposure when it settles, and with a nested trade's
+    second dollar a pair when both its legs paid, see both_paid(). Until 2026-10-12 live's orders
     followed, by venue and by how long the book had sent nothing, and the
     legs settled in the window by venue came before the open trades.
     """
@@ -453,10 +470,12 @@ def print_market_trades(conn, since, hours, mode, market, sports, now):
     args = (mode, since) + params
     recent, locked = query_rows(conn, f"SELECT COUNT(*), COALESCE(SUM(profit + hedge_pnl), 0) {window}", args)[0]
     exposed, exposure = exposure_settled(conn, since, mode, where, params)
+    doubled, second = both_paid(conn, since, mode, where, params)
     print(f"\n{mode} {market} trades: {total:,} in all, {recent:,} in the last {hours} hours")
-    if recent or exposed:
-        print(f"  net {dollars(locked + exposure)}$: {dollars(locked)}$ locked in and hedged on the trades opened, "
-              f"{dollars(exposure)}$ on the exposed contracts of {exposed:,} trades settled")
+    if recent or exposed or doubled:
+        print(f"  net {dollars(locked + exposure + second)}$: {dollars(locked)}$ locked in and hedged on the trades opened, "
+              f"{dollars(exposure)}$ on the exposed contracts of {exposed:,} trades settled"
+              + (f", {dollars(second)}$ more on {doubled:,} nested trades both of whose legs paid" if doubled else ""))
     open_rows = load_open_trades(conn, mode, market, sports)
     if recent:
         body = query_rows(conn, f"""

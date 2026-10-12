@@ -346,13 +346,30 @@ def test_legs_on_one_venue_share_its_cash(tmp_path, quick):
 
 def test_two_signals_at_once_share_the_balance_instead_of_both_spending_it(tmp_path, quick):
     latest = books()
+    for (venue, contract_id), book in list(latest.items()):         # A second pair, on two other contracts priced alike.
+        latest[(venue, contract_id + "2")] = Book(venue, contract_id + "2", book.ts, book.bids, book.asks)
+    other = ({**YES, "contract_id": "pm2"}, {**NO, "contract_id": "k2"})
+    fees = {**FEES, ("polymarket_us", "pm2"): FEES[("polymarket_us", "pm")], ("kalshi", "k2"): FEES[("kalshi", "k")]}
     conn, cash, ex = executor(tmp_path, latest, start=30.0)      # Room for 50 contracts at 0.45 once, not twice.
-    assert run(ex, signals=2) == [True, True]
+
+    async def scenario():
+        sent = [ex.signal(PAIR, YES, NO, 0.08, 100, fees, NOW), ex.signal({**PAIR, "id": 2}, *other, 0.08, 100, fees, NOW)]
+        await asyncio.gather(*ex.tasks)
+        return sent
+    assert asyncio.run(scenario()) == [True, True]
     first, second = stored(conn)
     # The second saw what the first had reserved on both venues: 7.5 left on Polymarket US and 6.5 on Kalshi, so 13 at 0.47.
     assert (first["quantity"], second["quantity"]) == (50, 13)
     assert cash.amounts == pytest.approx({"polymarket_us": 30 - 63 * 0.45, "kalshi": 30 - 63 * 0.47})
     assert min(cash.amounts.values()) >= 0
+
+
+def test_a_signal_on_a_contract_a_trade_in_flight_holds_waits_until_it_is_done(tmp_path, quick):
+    # A contract may be in a pair and in the nested pairs of its line: two trades on it at once would race for its levels.
+    conn, cash, ex = executor(tmp_path, books())
+    assert run(ex, signals=2) == [True, False]
+    assert len(stored(conn)) == 1 and ex.busy == {}
+    assert run(ex) == [True]                                    # Done, so the contracts are free again.
 
 
 def test_paper_trades_spend_the_cash_down_to_nothing(tmp_path, quick):

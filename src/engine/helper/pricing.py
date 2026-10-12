@@ -272,6 +272,16 @@ def may_pair(a, b, one_venue):
     return a["venue"] != b["venue"] or (one_venue and same_rules(a, b))
 
 
+def supplying(members, side):
+    """
+    The members that may hold one side of the bet: every member of a pair,
+    which may hold either, but of a nested pair only those whose side it is,
+    the lower line's the yes and the higher line's the no, see
+    catalog/nest.py.
+    """
+    return [m for m in members if m.get("side", side) == side]
+
+
 def best_trade(members, books, fee_infos, one_venue=False):
     """
     The cheapest yes leg and the cheapest no leg across a pair's members,
@@ -287,21 +297,25 @@ def best_trade(members, books, fee_infos, one_venue=False):
     two listings of a season's win total are another matter: from
     2026-09-30 to 10-05 live traded 255 of them, locking in 103$ on 978$
     of capital, until both legs were kept off one venue that day, which
-    held for every pair to 2026-10-06. Returns a Priced, or None when no
-    two members that may pair quote a side each.
+    held for every pair to 2026-10-06. A nested pair's members hold only
+    their own side, see supplying(), and its legs are always on two
+    venues, see catalog/nest.py. Returns a Priced, or None when no two
+    members that may pair quote a side each.
     """
-    yes, _ = cheapest(members, books, "yes", fee_infos)
-    no, _ = cheapest(members, books, "no", fee_infos)
+    one_venue = one_venue and not any("side" in m for m in members)
+    yeses, noes = supplying(members, "yes"), supplying(members, "no")
+    yes, _ = cheapest(yeses, books, "yes", fee_infos)
+    no, _ = cheapest(noes, books, "no", fee_infos)
     if yes is None or no is None:
         return None
     if may_pair(yes, no, one_venue):
         return price_pair(yes, no, books, fee_infos)
     # These two may not pair. Try the best partner each side may have and keep the better pair.
     candidates = []
-    other_no, _ = cheapest([m for m in members if may_pair(yes, m, one_venue)], books, "no", fee_infos)
+    other_no, _ = cheapest([m for m in noes if may_pair(yes, m, one_venue)], books, "no", fee_infos)
     if other_no is not None:
         candidates.append(price_pair(yes, other_no, books, fee_infos))
-    other_yes, _ = cheapest([m for m in members if may_pair(m, no, one_venue)], books, "yes", fee_infos)
+    other_yes, _ = cheapest([m for m in yeses if may_pair(m, no, one_venue)], books, "yes", fee_infos)
     if other_yes is not None:
         candidates.append(price_pair(other_yes, no, books, fee_infos))
     return max(candidates, key=lambda c: c.edge) if candidates else None

@@ -59,6 +59,18 @@ CREATE TABLE IF NOT EXISTS pairs (
     matched_at   TEXT NOT NULL
 );
 
+-- The members of the pairs that nest one line of a bet inside a higher one, yes on the lower line and no on the higher,
+-- see catalog/nest.py: the contracts of the two lines on either venue, a line one venue alone lists too. A nested pair is
+-- a pair of its own, current while it has members here, and its sport's rows are written again at each match, after its
+-- bets. From 2026-10-12.
+CREATE TABLE IF NOT EXISTS nest_members (
+    pair_id      INTEGER NOT NULL,   -- The nested pair, see pairs.
+    venue        TEXT NOT NULL,
+    contract_id  TEXT NOT NULL,
+    side         TEXT NOT NULL,      -- 'yes' for the lower line's contracts, which supply the yes, 'no' for the higher's.
+    PRIMARY KEY (pair_id, venue, contract_id)
+);
+
 CREATE TABLE IF NOT EXISTS gaps (
     venue        TEXT NOT NULL,
     start_ts     TEXT NOT NULL,   -- When the connection was lost, ISO 8601 UTC.

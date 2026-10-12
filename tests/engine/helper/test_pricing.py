@@ -206,6 +206,23 @@ def test_on_a_future_both_legs_may_be_two_contracts_of_one_venue_with_the_same_r
         assert pricing.best_trade(members, books, fee_infos, one_venue=True)[1]["contract_id"] == "k"
 
 
+def test_a_nested_pair_takes_yes_on_the_lower_line_and_no_on_the_higher_on_two_venues():
+    # Over 9.5 wins and over 10.5 wins, a season's two lines on each venue, as database.load_pairs() gives them.
+    members = [dict(member(v, f"{v[0]}{line}"), side=side, rules_digest="r")
+               for line, side in ((9.5, "yes"), (10.5, "no")) for v in ("kalshi", "polymarket_us")]
+    books = {("kalshi", "k9.5"): Book("kalshi", "k9.5", "t", [[0.37, 100]], [[0.38, 100]]),
+             ("polymarket_us", "p9.5"): Book("polymarket_us", "p9.5", "t", [[0.39, 100]], [[0.40, 100]]),
+             ("kalshi", "k10.5"): Book("kalshi", "k10.5", "t", [[0.45, 100]], [[0.47, 100]]),
+             ("polymarket_us", "p10.5"): Book("polymarket_us", "p10.5", "t", [[0.35, 100]], [[0.36, 100]])}
+    fee_infos = {key: NO_K_FEES if key[0] == "kalshi" else NO_PM_FEES for key in books}
+    # Yes over 9.5 at Polymarket US's 0.40 and no over 10.5 at one minus Kalshi's 0.45 bid lock in 5 cents. Yes over 10.5
+    # at 0.36 is cheaper, but holds the wrong side of the nest, and yes over 9.5 on Kalshi at 0.38 with Kalshi's no over
+    # 10.5 would lock in 7 cents with both legs on one venue, which a nested pair never has, even on a future.
+    for one_venue in (False, True):
+        yes, no, edge, *_ = pricing.best_trade(members, books, fee_infos, one_venue=one_venue)
+        assert (yes["contract_id"], no["contract_id"], edge) == ("p9.5", "k10.5", pytest.approx(0.05))
+
+
 def test_same_rules_needs_two_contracts_paying_on_one_side_with_rules():
     a, b = dict(member("polymarket_us", "pm"), rules_digest="r"), dict(member("polymarket_us", "pm2"), rules_digest="r")
     assert pricing.same_rules(a, b)

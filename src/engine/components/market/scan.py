@@ -8,7 +8,10 @@ rules, and prices buying both. An episode is a stretch where that net edge
 stays above zero after fees. Each episode becomes an Opportunity with its
 two legs, its duration, its peak edge, how many contracts could have been
 filled at the peak by walking the books' depth, and the return on the
-capital tied up, annualized as if held until the bet pays out.
+capital tied up, annualized as if held until the bet pays out. A nested
+pair, yes on one line of a bet and no on a higher one, see
+catalog/nest.py, is priced as any other, each member holding only its own
+side, see pricing.best_trade(), from 2026-10-12.
 
 Within an episode the edge worth trading, config.MIN_EDGE or more, may
 come and go. The Opportunity also keeps the longest unbroken stretch of it,

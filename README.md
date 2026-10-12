@@ -70,6 +70,10 @@ what.
   same bet.
 - **Pair**: the contracts on both venues that describe one bet. Its
   contracts are its **members**.
+- **Nested pair**: yes on one line of a bet with no on a higher line of
+  it, which pays at least a dollar a pair and two when the number lands
+  between the lines (`catalog/nest.py`). Its members hold only their own
+  side.
 - **Side**: `yes` or `no`, the two outcomes of a bet. Holding both sides
   pays exactly a dollar a pair, whichever way the game goes.
 - **Polarity**: which side of the bet a contract pays on. You hold the
@@ -154,9 +158,11 @@ Follow one Kalshi order book change from the wire to a trade.
    `pricing.best_trade`). For every pair the contract belongs to, the
    scanner finds the cheapest way to hold yes and the cheapest way to
    hold no across the pair's members, on two different venues, or on a
-   future two contracts of one venue with the same rules. Then it works
-   out the edge of buying both. A member whose venue is in its weekly
-   maintenance is left out (`venues.is_maintenance`).
+   future two contracts of one venue with the same rules. A nested pair's
+   members hold only their own side, the lower line's the yes and the
+   higher line's the no, always on two venues (`pricing.supplying`). Then
+   it works out the edge of buying both. A member whose venue is in its
+   weekly maintenance is left out (`venues.is_maintenance`).
 6. **Follow the episode**. A positive edge opens an `Episode` or extends
    it and keeps its peak. When the edge ends, the episode is stored as an
    Opportunity. While it lasts, each desk's executor is offered it, until
@@ -207,8 +213,11 @@ The status line counts the markets not trading, by venue and why.
    (`most`). It then asks for `FILL_SHARE` of what those levels show, but
    no more than the cash each venue can spend, on Kalshi the cash on the
    market's shard, live as on paper, each leg's fee at its limit included
-   (`order_cost`). The cash is reserved, fees too, and the trade is stored
-   before any order goes out.
+   (`order_cost`). A signal with a leg on a contract another trade in
+   flight has a leg on is turned down (`busy`), from 2026-10-12, as a
+   contract can now be in a pair and in its line's nested pairs, and two
+   trades on it at once would race for the same levels. The cash is
+   reserved, fees too, and the trade is stored before any order goes out.
 2. **Fill** (`run_trade`). With a leg on each venue, live's Polymarket US
    order goes first and its Kalshi order only once that has answered, for
    what it filled, and not at all when it filled nothing (`fill_legs`,
@@ -284,6 +293,7 @@ place (see the top of `db/database.py`):
 | table | written by |
 |---|---|
 | contracts, bets, pairs | the catalog |
+| nest_members | the catalog: each nested pair's contracts and the side each supplies, from 2026-10-12 |
 | gaps | the recorder, when a feed connection drops |
 | opportunities | the scanner, one row per episode, with what one order could have had as live takes it (`take_size`) and whether that moment came with a change of Polymarket US's book (`pm_changed`) |
 | trades | the executors, paper and live, with whether the game was under way (`in_play`) |
@@ -467,7 +477,42 @@ PM; and Kalshi pays a race on the party of whoever is sworn in, in January,
 and control of a house on February 1, Polymarket US on the election. A note
 is a warning to read, not a bar.
 
-**pipeline.py** runs fetch, classify, and match in one call. The live
+**nest.py** nests a bet's lines inside each other. The catalog states
+every bet with a line as its subject's number going over the line: a
+game's points, the margin of the side a spread names, a player's yards, a
+team's wins. So of two lines of one bet, going over the higher means going
+over the lower too, and yes on the lower line with no on the higher pays
+at least a dollar a pair: the lower line's yes when the number goes over
+both, the higher's no when it goes over neither, and both, two dollars,
+when it lands between them. Over 42.5 points with not over 45.5 pays two
+dollars on 43, 44, or 45 points and one on any other score. A nested pair
+is a pair of its own, `nfl total 2026-10-11 PHI@JAX 42.5 nested 45.5`, of
+the kind `total_nested`, whose contracts are kept in the `nest_members`
+table with the side each supplies, the lower line's only the yes and the
+higher's only the no (`database.load_pairs`), and its legs always go on
+two venues. A line nests whether both venues list it or one alone does:
+a pair needs the same line on both venues, a nested pair only a line on
+each, so Kalshi's 42.5 and 44.5 nest with Polymarket US's 43.5, and a line
+one venue alone lists is recorded for its nested pairs
+(`load_recording_targets`). Each line is nested with the next two above
+it that give its legs two venues (`STEPS`), on the futures and on the
+games from the day before the refresh, for every kind whose statement is
+a number going over the line (`nests_kind`): spreads and totals of a game
+or any part of it, a team's total, maps, games, and corners, a player's
+numbers, and a season's. Only lines ending in a half nest, so no number
+lands on one and no push rule comes into it; a round a fight ends in, or
+a price Bitcoin touches, does not nest. A match the venues date a day
+apart nests as one, as it pairs. On 2026-10-12, at the user's asking,
+that made 23,178 nested pairs, 3,003 of them futures, 11,325 of them on
+lines both venues list, and recorded some 4,000 more Kalshi contracts and
+3,000 more Polymarket US ones, three or four more Polymarket US
+connections. Both venues' wording was read for each kind: Kalshi's
+"Jaguars wins by over 1.5 points" with Polymarket US's "Eagles cover
++1.5" as its no, "at least 3 wins" and "at least 4", "40+ receiving
+yards" and "50+", and Polymarket US's "Eagles cover +8.5", a line Kalshi
+does not list, with Kalshi's "Jaguars wins by over 9.5".
+
+**pipeline.py** runs fetch, classify, match, and nest in one call. The live
 process runs it every hour in a child process, so new games and futures
 enter the pairs while it runs. A refresh of every sport takes some eight
 minutes,
@@ -613,7 +658,10 @@ still be two contracts of one venue with the same rules word for word
 pairs): Polymarket US lists each college and pro football win total twice,
 once in a market of every team's and once in the team's own, and from
 2026-09-30 to 10-05 live traded 255 such pairs, locking in $103 on $978,
-until the legs were kept off one venue altogether, to 2026-10-06. An
+until the legs were kept off one venue altogether, to 2026-10-06. A
+nested pair, yes on one line of a bet and no on a higher one
+(**catalog/nest.py**), is priced like any pair, each member holding only
+its own side (`pricing.supplying`), its legs always on two venues. An
 episode is a stretch where the net edge stays positive. When it ends it is
 stored as an `Opportunity` with its legs, duration, peak edge, how many
 contracts the recorded depth would have filled at the peak, and the return
@@ -1607,6 +1655,22 @@ at 15 cents for 7.48$, and a Dota 2 map at 100 that Polymarket US filled
 and Kalshi did not, sold back for 7.82$ less. On the user's asking the
 cap became 20 from that evening.
 
+**Nested lines.** From October 12, at the user's asking, both futures
+and games in play trade nested pairs, yes on one line of a bet and no on
+a higher one, by the same rules as any pair: two cents and a tenth of a
+second in play, at most 20 contracts, Polymarket US's order first and
+Kalshi's giving up as much as half the edge left, and on a future the
+rate a year on the dollar a pair it surely pays. The trade locks in that
+dollar less what the two legs cost; when the number lands between the
+lines both legs pay, and the summary's net counts that second dollar a
+pair once the trade settles (`both_paid`). The catalog nested 23,178
+pairs that day, counting the lines one venue alone lists, which are
+recorded for them from that day's second build. Whether
+venues misprice one line against another often enough to trade is what
+the episodes will show: an edge needs one venue's lower line to cost
+less than the other's higher line pays, while the higher line should
+cost less by the chance the number lands between them.
+
 **Kalshi's leg giving up edge.** From October 6 15:34 UTC to October 11
 23:00, live made 7,073 trades on games under way, locking in 129.00$ and
 netting 81.04$. Polymarket US filled more than Kalshi on 210 of them,
@@ -1702,7 +1766,7 @@ python3 -m tools.feed_check --seconds 300 --markets 100
 ```
 src/
   api/        venue clients and the shared websocket book stream
-  catalog/    fetch, classify (one parser per venue), match, notes, pipeline
+  catalog/    fetch, classify (one parser per venue), match, nest, notes, pipeline
   common/     paths, time and json helpers, the venue list and maintenance windows, the sports in groups, the logger,
               the timer background work runs on, how a child process starts, quantiles
   db/         models, the SQLite schema and its migrations, reads and writes
@@ -1726,6 +1790,7 @@ Where to look to change something:
 | how a websocket connects and reconnects | `api/bookstream.py` |
 | which markets are understood | `catalog/classify/` |
 | how bets are paired | `catalog/match.py` |
+| how a bet's lines are nested | `catalog/nest.py` |
 | where the venues' rules differ | `catalog/notes.py` |
 | fees | `engine/helper/fees.py` |
 | how an edge is priced | `engine/helper/pricing.py` |
