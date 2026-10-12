@@ -237,7 +237,7 @@ def test_a_nested_trade_landing_between_its_lines_is_paid_on_both_legs(tmp_path)
     cash = PaperBalances(conn)
     logs = []
     s = settle.Settler(conn, cash, logs.append)
-    trade = filled_trade(conn)
+    filled_trade(conn)
     settled(s, "2026-09-20T21:05:00+00:00",
             {("polymarket_us", "pm"): (1.0, "2026-09-20T20:10:00+00:00"), ("kalshi", "k"): (0.0, "2026-09-20T20:09:00+00:00")})
     row = conn.execute("SELECT * FROM settlements").fetchone()

@@ -349,34 +349,6 @@ class Executor:
         self.unfunded.pop(trade_id, None)
         self.unsold.pop(trade_id, None)
 
-    async def fill_legs(self, trade, legs):
-        """
-        Send both legs' orders and return their Fills, in the legs' order.
-        Both go out at once, unless the trade has a lead in leads: then the
-        leg on that venue goes first, and the other only once it has
-        answered, for no more than it filled, and not at all when it filled
-        nothing, so a lead that misses leaves nothing to sell back. The
-        other's limit may first be raised, see follow_limit().
-        """
-        lead = self.leads.pop(trade.id, None)
-        if lead is None:
-            return list(await asyncio.gather(*(self.fill(trade, leg) for leg in legs)))
-        first = next(leg for leg in legs if leg.venue == lead)
-        second = next(leg for leg in legs if leg is not first)
-        led = await self.fill(trade, first)
-        held = order_cost(second, second.quantity)      # What signal() held back for the second leg's order.
-        second.quantity = order_size(min(second.quantity, led.filled))
-        if second.quantity < self.step:
-            follow = Fill(ts=led.ts, note=f"not sent, as {lead} filled nothing first")
-        else:
-            extra = self.follow_limit(trade, led, second, held)
-            try:
-                follow = await self.fill(trade, second, led.ts)
-            finally:
-                if extra:
-                    self.cash.release(second.venue, extra, shard(second))
-        return [led, follow] if legs[0] is first else [follow, led]
-
     def allowance(self, trade):
         """
         The share of the edge left once the leg sent first has filled that
@@ -414,6 +386,34 @@ class Executor:
                 return extra
             limit = round(limit - CENT, 2)
         return 0.0
+
+    async def fill_legs(self, trade, legs):
+        """
+        Send both legs' orders and return their Fills, in the legs' order.
+        Both go out at once, unless the trade has a lead in leads: then the
+        leg on that venue goes first, and the other only once it has
+        answered, for no more than it filled, and not at all when it filled
+        nothing, so a lead that misses leaves nothing to sell back. The
+        other's limit may first be raised, see follow_limit().
+        """
+        lead = self.leads.pop(trade.id, None)
+        if lead is None:
+            return list(await asyncio.gather(*(self.fill(trade, leg) for leg in legs)))
+        first = next(leg for leg in legs if leg.venue == lead)
+        second = next(leg for leg in legs if leg is not first)
+        led = await self.fill(trade, first)
+        held = order_cost(second, second.quantity)      # What signal() held back for the second leg's order.
+        second.quantity = order_size(min(second.quantity, led.filled))
+        if second.quantity < self.step:
+            follow = Fill(ts=led.ts, note=f"not sent, as {lead} filled nothing first")
+        else:
+            extra = self.follow_limit(trade, led, second, held)
+            try:
+                follow = await self.fill(trade, second, led.ts)
+            finally:
+                if extra:
+                    self.cash.release(second.venue, extra, shard(second))
+        return [led, follow] if legs[0] is first else [follow, led]
 
     async def run_trade(self, trade, legs):
         """
@@ -723,6 +723,15 @@ class Executor:
         if trade.matched > 0 and trade.id not in self.exposed and trade.id not in self.set_aside:
             self.offer_again(trade.pair_id, trade.signal_ts, self.clock())
 
+    def free(self, legs):
+        """
+        Once a trade on legs is done, its legs' contracts are free for other trades, see signal().
+        """
+        for leg in legs:
+            self.busy[leg.key] -= 1
+            if self.busy[leg.key] <= 0:
+                del self.busy[leg.key]
+
     def signal(self, pair, yes, no, edge, size, fee_infos, now):
         """
         Called by the scanner when a pair shows an edge. Sends the two legs
@@ -783,15 +792,6 @@ class Executor:
         if pair.get("game_date") is None:
             task.add_done_callback(lambda done: self.again(trade, done))
         return True
-
-    def free(self, legs):
-        """
-        Once a trade on legs is done, its legs' contracts are free for other trades, see signal().
-        """
-        for leg in legs:
-            self.busy[leg.key] -= 1
-            if self.busy[leg.key] <= 0:
-                del self.busy[leg.key]
 
     def tick(self, now):
         """

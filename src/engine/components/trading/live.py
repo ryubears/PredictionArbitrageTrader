@@ -31,9 +31,9 @@ config.MAX_PAYOUT_HOURS, by its own rules below. With its legs on two
 venues, Polymarket US's order goes first and Kalshi's only once that has
 answered, for what it filled, see Executor.fill_legs(), on a game under way
 at a limit raised by up to config.LIVE_IN_PLAY_ALLOWANCE of the edge left,
-from 2026-10-12, see allowance(). From 2026-10-04 to
-10-05 the in-play test traded 200 of them at no more than 5 contracts,
-each beside a paper twin on the same signal, see tools/in_play_test.py.
+from 2026-10-12, see allowance(). From 2026-10-04 to 10-05 the in-play test
+traded 200 of them at no more than 5 contracts, each beside a paper twin on
+the same signal, see tools/in_play_test.py.
 When paper trades the same games, each live order leaves a footprint of
 what it took, which paper adds back, see footprints.py.
 

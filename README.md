@@ -1159,9 +1159,9 @@ each trade's capital times the days from the trade to its settlement or,
 still open, its payout, times 365. The paper money from the ledger and the
 live balances read from the venues now, with Kalshi's shards, come last.
 Each section is a title line with its details on indented lines under it,
-and a long list, such as the pairs of each sport, wraps at 100 characters. `--hours` sets
-the window, `--sport nfl,ncaaf` narrows everything to some sports, and
-`--no-live` leaves out the live balances.
+and a long list, such as the pairs of each sport, wraps at 100 characters.
+`--hours` sets the window, `--sport nfl,ncaaf` narrows everything to some
+sports, and `--no-live` leaves out the live balances.
 
 `src/tools/live_check.py` reads both venues' balances with the keys in
 `data/` and says when the Kalshi key's location attestation lapses, and

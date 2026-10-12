@@ -46,7 +46,6 @@ ones are recorded.
 
 from collections import defaultdict
 from catalog import match
-from db.models import Bet, Pair
 
 STEPS = 2           # How many lines above it, of those giving its legs two venues, each line is nested with.
 NESTED = "_nested"  # What a nested pair's kind adds to its bet's kind.
@@ -106,12 +105,7 @@ def nest(bets, sport, since=None):
             higher = [high for high in ordered[i + 1:] if len({b["venue"] for b in wide + lines[high]}) > 1]
             for high in higher[:STEPS]:
                 narrow = lines[high]
-                rows = wide + narrow
-                first = wide[0]
-                pair = Pair(sport=sport, label=f"{match.label(first, sport)} nested {high}", kind=first["kind"] + NESTED,
-                            season=first["season"], game_date=first["game_date"], team_a=first["team_a"], team_b=first["team_b"],
-                            subject=first["subject"], line=low, flags=match.flags(rows, sport),
-                            members=[Bet(r["venue"], r["contract_id"], r["kind"], r["season"], r["game_date"], r["team_a"], r["team_b"],
-                                         r["subject"], r["line"], r["polarity"]) for r in rows])
+                pair = match.make_pair(wide + narrow, sport)        # As the lower line's pair, but for the nest's label and kind.
+                pair.label, pair.kind = f"{pair.label} nested {high}", pair.kind + NESTED
                 nested.append((pair, wide, narrow))
     return nested
