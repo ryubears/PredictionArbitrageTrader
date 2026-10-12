@@ -27,7 +27,7 @@ import ssl
 from email.message import EmailMessage
 from api import kalshi
 from common.log import on_failure
-from common.paths import DATA_DIR
+from common.paths import DATA_DIR, NAME
 from common.periodic import Periodic
 from common.timeutil import epoch, now_iso, utc_minute
 from db import database
@@ -144,11 +144,11 @@ class AttestationWatch:
         when = utc_minute(lapses)
         left = lapses - epoch(now)
         if left <= 0:
-            return (f"SportsArb: the Kalshi key's location attestation lapsed at {when}",
+            return (f"{NAME}: the Kalshi key's location attestation lapsed at {when}",
                     f"Kalshi's location attestation for the account's API keys lapsed at {when}. Until it is renewed on "
                     f"Kalshi, Kalshi refuses the key for sports markets, so live orders there fail.")
         if left <= config.KEY_WARN_HOURS * 3600:
-            return (f"SportsArb: renew the Kalshi key's location attestation before {when}",
+            return (f"{NAME}: renew the Kalshi key's location attestation before {when}",
                     f"Kalshi's location attestation for the account's API keys lapses at {when}, in {left / 3600:.0f} hours. "
                     f"Renew it on Kalshi before then. Past it, Kalshi refuses the key for sports markets, so live orders there fail.")
         return None

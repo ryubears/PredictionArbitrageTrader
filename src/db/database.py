@@ -1,5 +1,5 @@
 """
-SQLite storage for SportsArb.
+SQLite storage for PredictionArbitrageTrader.
 
 One database file holds every table, which makes it easy to open in any
 SQLite browser. The tables follow the pipeline in order.
@@ -31,7 +31,7 @@ from db import migrations, schema
 from db.models import Alert, Bet, Gap, Ledger, Opportunity, Order, Settlement, Trade
 from pathlib import Path
 
-DB_PATH = DATA_DIR / "sportsarb.sqlite"
+DB_PATH = DATA_DIR / "sportsarb.sqlite"     # Named for the project's first name, SportsArb, which the instance's database keeps.
 
 # Model fields that are read from other tables or set by the database, so they are never written.
 NOT_STORED = {"id", "label", "starts_at"}
@@ -177,14 +177,15 @@ def load_recording_targets(conn, sport, now, horizon, venues, game_started_after
     """
     The contracts to record right now, as {venue: [contract_id, ...]}: every
     contract in a pair, or in a nested pair, see catalog/nest.py, on a game
-    no later than the horizon's date, for as long as it can trade. A game's contracts on both venues are recorded
-    while the game may still be in play, meaning it kicked off after
-    game_started_after, whatever their close times say, with the kickoff
-    from GAMES. Polymarket US leaves a game's contracts open two
-    weeks after it, and Kalshi's close time is its guess at the final
-    whistle, three hours after kickoff, which nearly every college game and
-    most NFL games outlast. A contract with no game, or on a game no
-    contract gives the kickoff of, is recorded until its close time.
+    no later than the horizon's date, for as long as it can trade. A game's
+    contracts on both venues are recorded while the game may still be in
+    play, meaning it kicked off after game_started_after, whatever their
+    close times say, with the kickoff from GAMES. Polymarket US leaves a
+    game's contracts open two weeks after it, and Kalshi's close time is
+    its guess at the final whistle, three hours after kickoff, which nearly
+    every college game and most NFL games outlast. A contract with no game,
+    or on a game no contract gives the kickoff of, is recorded until its
+    close time.
     """
     targets = {}
     for venue in venues:
@@ -234,6 +235,21 @@ def load_bets(conn, sport, venue=None):
 
 # PAIRS
 
+def upsert_pair(conn, p, matched_at):
+    """
+    Store a Pair, or update the one stored under its label, and set its id.
+    """
+    conn.execute("""
+        INSERT INTO pairs (sport, label, kind, season, game_date, team_a, team_b, subject, line, venues, contracts, flags, matched_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT (label) DO UPDATE SET kind = excluded.kind, season = excluded.season, game_date = excluded.game_date,
+            team_a = excluded.team_a, team_b = excluded.team_b, subject = excluded.subject, line = excluded.line,
+            venues = excluded.venues, contracts = excluded.contracts, flags = excluded.flags, matched_at = excluded.matched_at
+    """, (p.sport, p.label, p.kind, p.season, p.game_date, p.team_a, p.team_b, p.subject, p.line,
+          ",".join(p.venues), len(p.members), jsonutil.dump(p.flags), matched_at))
+    p.id = conn.execute("SELECT id FROM pairs WHERE label = ?", (p.label,)).fetchone()[0]
+
+
 def replace_pairs(conn, sport, pairs, matched_at):
     """
     Store the sport's pairs and point each member's bet row at its pair.
@@ -252,21 +268,6 @@ def replace_pairs(conn, sport, pairs, matched_at):
     conn.executemany("UPDATE bets SET pair_id = ? WHERE venue = ? AND contract_id = ?",
                      [(p.id, m.venue, m.contract_id) for p in pairs for m in p.members])
     conn.commit()
-
-
-def upsert_pair(conn, p, matched_at):
-    """
-    Store a Pair, or update the one stored under its label, and set its id.
-    """
-    conn.execute("""
-        INSERT INTO pairs (sport, label, kind, season, game_date, team_a, team_b, subject, line, venues, contracts, flags, matched_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-        ON CONFLICT (label) DO UPDATE SET kind = excluded.kind, season = excluded.season, game_date = excluded.game_date,
-            team_a = excluded.team_a, team_b = excluded.team_b, subject = excluded.subject, line = excluded.line,
-            venues = excluded.venues, contracts = excluded.contracts, flags = excluded.flags, matched_at = excluded.matched_at
-    """, (p.sport, p.label, p.kind, p.season, p.game_date, p.team_a, p.team_b, p.subject, p.line,
-          ",".join(p.venues), len(p.members), jsonutil.dump(p.flags), matched_at))
-    p.id = conn.execute("SELECT id FROM pairs WHERE label = ?", (p.label,)).fetchone()[0]
 
 
 def replace_nests(conn, sport, nests, matched_at):
@@ -311,7 +312,7 @@ def load_pairs(conn, sport):
             paired.add(key)
             members.setdefault(r["pair_id"], []).append(member)
         if nested_id is not None:
-            members.setdefault(nested_id, []).append(sided.setdefault((r["venue"], r["contract_id"], side), dict(member, side=side)))
+            members.setdefault(nested_id, []).append(sided.setdefault(key + (side,), dict(member, side=side)))
     return {r["id"]: dict(r, members=members[r["id"]]) for r in conn.execute("SELECT * FROM pairs") if r["id"] in members}
 
 

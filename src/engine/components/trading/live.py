@@ -31,9 +31,9 @@ config.MAX_PAYOUT_HOURS, by its own rules below. With its legs on two
 venues, Polymarket US's order goes first and Kalshi's only once that has
 answered, for what it filled, see Executor.fill_legs(), on a game under way
 at a limit raised by up to config.LIVE_IN_PLAY_ALLOWANCE of the edge left,
-from 2026-10-12, see allowance(). From 2026-10-04 to
-10-05 the in-play test traded 200 of them at no more than 5 contracts,
-each beside a paper twin on the same signal, see tools/in_play_test.py.
+from 2026-10-12, see allowance(). From 2026-10-04 to 10-05 the in-play test
+traded 200 of them at no more than 5 contracts, each beside a paper twin on
+the same signal, see tools/in_play_test.py.
 When paper trades the same games, each live order leaves a footprint of
 what it took, which paper adds back, see footprints.py.
 
@@ -81,6 +81,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from api import kalshi, orders, polymarket_us
 from common import jsonutil
+from common.paths import NAME
 from common.periodic import Periodic
 from common.timeutil import at_seconds, now_iso
 from common.venues import VENUES, is_maintenance
@@ -135,7 +136,7 @@ class LiveExecutor(Executor):
         where = venue if part is None else f"{venue} shard {part}"
         if dollars < config.LIVE_LOW_CASH and (venue, part) not in self.low:
             self.low.add((venue, part))
-            subject = f"SportsArb live {where} cash low: {dollars:,.2f}$"
+            subject = f"{NAME} live {where} cash low: {dollars:,.2f}$"
             body = (f"Live cash on {where} is {dollars:,.2f}$, under {config.LIVE_LOW_CASH:,.2f}$. Trades there go on as far as it "
                     f"pays for, so add money to the venue to keep trading"
                     + (", or move some to the shard with python3 -m tools.kalshi_shards." if part is not None else "."))

@@ -63,7 +63,7 @@ counted twice, in the cash and at cost: on 2026-10-11 about 473$ of the
 than meant.
 """
 
-from common.paths import DATA_DIR
+from common.paths import DATA_DIR, NAME
 from common.timeutil import now_iso, shift
 from db import database
 from engine.helper import config
@@ -114,7 +114,7 @@ class Brakes:
         self.log(f"{title}: {reason}")
         if self.notifier:
             going_on = "No more orders are sent, flattening included." if self.stopped else "Exposed trades are still flattened."
-            self.notifier.send("halt", f"SportsArb {title}",
+            self.notifier.send("halt", f"{NAME} {title}",
                                f"At {now[:19]} UTC: {reason}\n\nLive trading opens no new trades. {going_on} "
                                f"What is held is still settled. Balances: {self.cash.summary()}.\n\n"
                                f"Once the venues are checked, remove {HALT_FILE} and restart the process to resume.", now)

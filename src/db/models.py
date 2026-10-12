@@ -63,7 +63,8 @@ class Pair:
     The contracts on both venues that describe one bet. The label is the
     bet's identity in words, and the id is what the other tables refer to.
     Members are Bets, two or three of them, since a venue may list both
-    sides of a game as contracts.
+    sides of a game as contracts, or of a nested pair both lines' bets, see
+    catalog/nest.py.
     """
     id: int | None = row_id()
     sport: str = field(kw_only=True)    # Our sport key, for example 'nfl'.

@@ -141,6 +141,41 @@ def test_each_market_shows_under_its_heading_its_opportunities_then_paper_then_l
     assert [out.index(f"\n{head}") for head in heads] == sorted(out.index(f"\n{head}") for head in heads)
 
 
+def open_trades(conn, mode="live", pair_id=1):
+    """
+    Add open trades of the mode on the pair: (held a side, yes cost, no cost, locked in, flattening, signal, pays at).
+    One opened half an hour before NOW settling in December, one opened ten hours before it paying on September 27,
+    already past and waiting on a venue, one opened two days before it paying October 6, one opened ten days before it
+    paying October 4 that lost 2 cents flattening, and one in the window flattened to nothing, which holds nothing.
+    """
+    for held, yes_cost, no_cost, profit, hedge, signal, pays_at in (
+            (5, 2.5, 2.25, 0.25, 0.0, "2026-09-27T23:30:00+00:00", "2026-12-20T00:00:00+00:00"),
+            (5, 2.0, 2.7, 0.30, 0.0, "2026-09-27T14:00:00+00:00", "2026-09-27T20:00:00+00:00"),
+            (5, 2.0, 2.7, 0.30, 0.0, "2026-09-26T00:00:00+00:00", "2026-10-06T00:00:00+00:00"),
+            (5, 3.0, 1.7, 0.30, -0.02, "2026-09-18T00:00:00+00:00", "2026-10-04T20:45:00+00:00"),
+            (0, 0.0, 0.0, 0.0, -0.05, INSIDE, INSIDE)):
+        database.insert_trade(conn, Trade(mode=mode, pair_id=pair_id, trade="t", signal_ts=signal, edge=0.06, quantity=5,
+                                          yes_venue="kalshi", yes_contract="k", yes_polarity="yes", yes_limit=0.5,
+                                          no_venue="polymarket_us", no_contract="p", no_polarity="yes", no_limit=0.45,
+                                          pays_at=pays_at, yes_held=held, no_held=held, yes_cost=yes_cost, no_cost=no_cost,
+                                          profit=profit, hedge_pnl=hedge, status="filled"))
+
+
+def held_trade(conn, mode="live", pair_id=1, signal=BEFORE, held=(5, 5), cost=(2.5, 2.25), profit=0.0, hedge=0.0, status="filled",
+               yes=("kalshi", "k", "yes"), no=("polymarket_us", "p", "yes"), pays_at="2026-12-20T00:00:00+00:00"):
+    """
+    Add a trade of the mode on the pair, opened at signal, holding held on its yes and no legs at cost, each leg on
+    (venue, contract, polarity), and return it. By default Kalshi's k holds the bet's yes and Polymarket US's p its no.
+    """
+    t = Trade(mode=mode, pair_id=pair_id, trade="t", signal_ts=signal, edge=0.06, quantity=max(held),
+              yes_venue=yes[0], yes_contract=yes[1], yes_polarity=yes[2], yes_limit=0.5,
+              no_venue=no[0], no_contract=no[1], no_polarity=no[2], no_limit=0.45, pays_at=pays_at,
+              yes_filled=held[0], no_filled=held[1], yes_held=held[0], no_held=held[1], matched=min(held),
+              yes_cost=cost[0], no_cost=cost[1], profit=profit, hedge_pnl=hedge, status=status)
+    database.insert_trade(conn, t)
+    return t
+
+
 def test_a_markets_trades_show_by_kind_largest_open_ones_opened_by_outcome_then_the_open_trades(tmp_path, monkeypatch, capsys):
     def fill(conn):
         open_trades(conn)
@@ -171,26 +206,6 @@ def test_live_money_shows_each_venue_read_now_with_the_kalshi_shards(capsys):
     # The shards live trading uses, and any other holding money.
     assert capsys.readouterr().out.splitlines()[1:] == [
         "live money on the venues, read now", "  kalshi 92.00$ (shard 0 0.00$, shard 3 92.00$)", "  polymarket_us not read (401 unauthorized)"]
-
-
-def open_trades(conn, mode="live", pair_id=1):
-    """
-    Add open trades of the mode on the pair: (held a side, yes cost, no cost, locked in, flattening, signal, pays at).
-    One opened half an hour before NOW settling in December, one opened ten hours before it paying on September 27,
-    already past and waiting on a venue, one opened two days before it paying October 6, one opened ten days before it
-    paying October 4 that lost 2 cents flattening, and one in the window flattened to nothing, which holds nothing.
-    """
-    for held, yes_cost, no_cost, profit, hedge, signal, pays_at in (
-            (5, 2.5, 2.25, 0.25, 0.0, "2026-09-27T23:30:00+00:00", "2026-12-20T00:00:00+00:00"),
-            (5, 2.0, 2.7, 0.30, 0.0, "2026-09-27T14:00:00+00:00", "2026-09-27T20:00:00+00:00"),
-            (5, 2.0, 2.7, 0.30, 0.0, "2026-09-26T00:00:00+00:00", "2026-10-06T00:00:00+00:00"),
-            (5, 3.0, 1.7, 0.30, -0.02, "2026-09-18T00:00:00+00:00", "2026-10-04T20:45:00+00:00"),
-            (0, 0.0, 0.0, 0.0, -0.05, INSIDE, INSIDE)):
-        database.insert_trade(conn, Trade(mode=mode, pair_id=pair_id, trade="t", signal_ts=signal, edge=0.06, quantity=5,
-                                          yes_venue="kalshi", yes_contract="k", yes_polarity="yes", yes_limit=0.5,
-                                          no_venue="polymarket_us", no_contract="p", no_polarity="yes", no_limit=0.45,
-                                          pays_at=pays_at, yes_held=held, no_held=held, yes_cost=yes_cost, no_cost=no_cost,
-                                          profit=profit, hedge_pnl=hedge, status="filled"))
 
 
 def test_open_trades_are_summed_up_with_when_they_opened_and_resolve(tmp_path, monkeypatch, capsys):
@@ -334,21 +349,6 @@ def test_opportunities_on_a_database_from_before_step_14_are_shown_without_its_p
         conn.execute("ALTER TABLE opportunities DROP COLUMN pm_changed")    # As before step 14.
     out = report(tmp_path, monkeypatch, capsys, fill, markets=summary.MARKET_CHOICES["futures"])
     assert "), last 12 hours\n  1 episodes could have taken 94$ in one order each and locked in 6.00$\n" in out
-
-
-def held_trade(conn, mode="live", pair_id=1, signal=BEFORE, held=(5, 5), cost=(2.5, 2.25), profit=0.0, hedge=0.0, status="filled",
-               yes=("kalshi", "k", "yes"), no=("polymarket_us", "p", "yes"), pays_at="2026-12-20T00:00:00+00:00"):
-    """
-    Add a trade of the mode on the pair, opened at signal, holding held on its yes and no legs at cost, each leg on
-    (venue, contract, polarity), and return it. By default Kalshi's k holds the bet's yes and Polymarket US's p its no.
-    """
-    t = Trade(mode=mode, pair_id=pair_id, trade="t", signal_ts=signal, edge=0.06, quantity=max(held),
-              yes_venue=yes[0], yes_contract=yes[1], yes_polarity=yes[2], yes_limit=0.5,
-              no_venue=no[0], no_contract=no[1], no_polarity=no[2], no_limit=0.45, pays_at=pays_at,
-              yes_filled=held[0], no_filled=held[1], yes_held=held[0], no_held=held[1], matched=min(held),
-              yes_cost=cost[0], no_cost=cost[1], profit=profit, hedge_pnl=hedge, status=status)
-    database.insert_trade(conn, t)
-    return t
 
 
 def test_netting_pairs_a_contracts_yes_with_its_no_on_the_same_venue():

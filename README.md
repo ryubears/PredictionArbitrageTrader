@@ -1,4 +1,4 @@
-# SportsArb
+# PredictionArbitrageTrader
 
 A bot that looks for cross-venue arbitrage between the two US prediction
 markets, Kalshi and Polymarket US, and trades what it finds, on paper, with
@@ -1159,9 +1159,9 @@ each trade's capital times the days from the trade to its settlement or,
 still open, its payout, times 365. The paper money from the ledger and the
 live balances read from the venues now, with Kalshi's shards, come last.
 Each section is a title line with its details on indented lines under it,
-and a long list, such as the pairs of each sport, wraps at 100 characters. `--hours` sets
-the window, `--sport nfl,ncaaf` narrows everything to some sports, and
-`--no-live` leaves out the live balances.
+and a long list, such as the pairs of each sport, wraps at 100 characters.
+`--hours` sets the window, `--sport nfl,ncaaf` narrows everything to some
+sports, and `--no-live` leaves out the live balances.
 
 `src/tools/live_check.py` reads both venues' balances with the keys in
 `data/` and says when the Kalshi key's location attestation lapses, and
@@ -1231,6 +1231,8 @@ resubscribes. Each run logs the commit it runs and every setting when it
 starts, so the log says what produced its results. The instance was first
 placed in Mexico to reach polymarket.com, which was then dropped as a venue
 for legal reasons in favor of Polymarket US, and moved to us-east-1.
+The project was called SportsArb until 2026-10-12, and the instance keeps
+that name for its folder, its service, and its database file.
 
 `commands.txt` holds the commands used to check the data, deploy, and
 operate the instance, with the instance's address, key, and ids written

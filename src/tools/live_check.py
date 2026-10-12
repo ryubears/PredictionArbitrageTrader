@@ -18,6 +18,7 @@ import json
 import sys
 import time
 from api import kalshi
+from common.paths import NAME
 from common.timeutil import utc_minute
 from engine.components.money.live import READERS
 from engine.components.trading import notify
@@ -74,7 +75,7 @@ def check_email():
     """
     try:
         settings = json.loads(notify.EMAIL_FILE.read_text())
-        notify.send_email(settings, "SportsArb test email", "Live alerts will reach you here.")
+        notify.send_email(settings, f"{NAME} test email", "Live alerts will reach you here.")
     except Exception as e:
         print(f"email: not sent ({e!r})")
         return False
